@@ -13,4 +13,5 @@
 1. install dependencies
 ```bash
 go mody tidy
+go run main.go
 ```

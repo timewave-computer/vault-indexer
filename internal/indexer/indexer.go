@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -34,6 +35,13 @@ func New(cfg *config.Config) (*Indexer, error) {
 
 func (i *Indexer) Start() error {
 	log.Println("Starting indexer...")
+
+	// Perform health check by getting current block height
+	blockNumber, err := i.client.BlockNumber(i.ctx)
+	if err != nil {
+		return fmt.Errorf("health check failed: %w", err)
+	}
+	log.Printf("Health check successful - Current block height: %d", blockNumber)
 
 	// TODO: Implement the following:
 	// 1. Load historical events for each contract
