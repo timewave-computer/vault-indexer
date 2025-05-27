@@ -1,1 +1,4 @@
-config/config.yaml
+# Ignore all files in config/ directory
+config/*
+# But don't ignore config.example.yaml
+!config/config.example.yaml

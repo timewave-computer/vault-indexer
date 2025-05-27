@@ -13,5 +13,13 @@
 1. install dependencies
 ```bash
 go mody tidy
-go run main.go
+```
+
+2. run server
+```bash
+# For development (default)
+./start.sh
+
+# For production
+./start.sh prod
 ```
