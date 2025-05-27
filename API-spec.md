@@ -1,0 +1,112 @@
+# Accounts
+
+`/vaultAddress/accounts` 
+
+- to fetch all accounts (evm addresses) which have an associated position
+- paginated
+- returns list of EVM addresses
+
+### **Output**
+
+```jsx
+{
+	data: [
+		{
+			evm_address:string
+		}
+	],
+	pagination: 
+	{
+		// pagination data (cursor & page info. struct TBD)
+	}
+}
+```
+
+# Positions
+
+`/vaultAddress/positions?address=<evm_address>` 
+
+### Data Model
+
+```jsx
+ Position {
+	position_index_number: number // incrementing counter
+	ethereum_address: string
+	neutron_address: string | null // neutron address recorded for withdraw
+	position_start_height: number // block number position was created
+	position_end_height: number | null // block number position was modified -1
+	amount: number // amount of asset store
+	
+	// 'nice to haves' for quality of life
+	isTerminated: bool  // position for ethereum address becomes 0
+	entry_method: 'deposit' | 'transfer'
+	exit_method: 'withdraw' | 'deposit' | 'transfer' | null
+}
+```
+
+`Position` start block and amount will be immutable. Any time a position change is captured for an EVM address (deposit, withdraw, transfer), the latest position will be ‘closed’ at `block_height -1,` and a new `Position` will be opened at `block_height`. 
+
+### Input
+
+```jsx
+evm_address: string (optional) // option to filter positions by a user address
+```
+
+### Output
+
+```jsx
+{
+	data: [Position],
+	pagination: 
+	{
+		// pagination data (cursor & page info. struct TBD)
+	}
+}
+```
+
+### Example
+
+```jsx
+{
+	data: [
+		[
+		  { 
+			  // user1 deposited 1000, closed by second deposit
+		    "position_index_number": 1,
+		    "ethereum_address": "0xUserAddress1",
+		    "neutron_address": null,
+		    "position_start_height": 18000000,
+		    "position_end_height": 18000100,
+		    "amount": 1000,
+		    "isTerminated": false,
+		    "entry_method": 'deposit',
+		    "exit_method": 'deposit' 
+		  },
+		  {
+			 // user1 deposited another 1000, no withdraw or transfer
+		    "position_index_number": 2,
+		    "ethereum_address": "0xUserAddress1",
+		    "neutron_address": null,
+		    "position_start_height": 18000101,
+		    "position_end_height": null,
+		    "amount": 2000,
+		    "isTerminated": false,
+		    "entry_method": deposit
+		    "exit_method": null
+		    
+		  },
+		  // user2 deposited 1000 and withdrew
+		  {
+		    "position_index_number": 3,
+		    "ethereum_address": "0xUserAddress2",
+		    "neutron_address": "neutron1abc...",
+		    "position_start_height": 18010000,
+		    "position_end_height": 18030000,
+		    "amount": 1000,
+		    "isTerminated": true,
+		    "entry_method": "deposit",
+		    "exit_method": "withdraw"
+		  }
+	]
+}
+```
