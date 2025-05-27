@@ -14,4 +14,3 @@ contracts:
 
 database:
   supabase_url: "https://your-project.supabase.co"
-  supabase_key: "your-supabase-anon-key" 

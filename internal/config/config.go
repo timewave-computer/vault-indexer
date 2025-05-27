@@ -24,12 +24,8 @@ type ContractConfig struct {
 }
 
 type DatabaseConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	User     string `mapstructure:"user"`
-	Password string `mapstructure:"password"`
-	DBName   string `mapstructure:"dbname"`
-	SSLMode  string `mapstructure:"sslmode"`
+	SupabaseURL string `mapstructure:"supabase_url"`
+	SupabaseKey string `mapstructure:"supabase_key"`
 }
 
 func Load() (*Config, error) {
