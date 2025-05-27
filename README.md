@@ -9,3 +9,8 @@
 5. writing events to postgres
 6. postgres transforms events table to Positions table as the Events table gets written
 
+## Developing
+1. install dependencies
+```bash
+go mody tidy
+```
