@@ -142,25 +142,41 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
 	if newAmount != 0 {
 		// Get the highest position index
 		var maxPosition struct {
-			MaxIndex int64 `json:"max_index"`
+			PositionIndexNumber int64 `json:"position_index_number"`
 		}
 		data, _, err := p.db.From("positions").
-			Select("max(position_index_number) as max_index", "", false).
-			Single().
+			Select("position_index_number", "", false).
 			Execute()
 		if err != nil {
-			return fmt.Errorf("failed to get max position index: %w", err)
+			// If no positions exist yet, start with index 0
+			if err.Error() == "(PGRST204) Results contain 0 rows" {
+				maxPosition.PositionIndexNumber = 0
+			} else {
+				return fmt.Errorf("failed to get max position index: %w", err)
+			}
+		} else {
+			var positions []struct {
+				PositionIndexNumber int64 `json:"position_index_number"`
+			}
+			if err := json.Unmarshal(data, &positions); err != nil {
+				return fmt.Errorf("failed to unmarshal positions: %w", err)
+			}
+
+			// Find the maximum position index
+			maxIndex := int64(0)
+			for _, pos := range positions {
+				if pos.PositionIndexNumber > maxIndex {
+					maxIndex = pos.PositionIndexNumber
+				}
+			}
+			maxPosition.PositionIndexNumber = maxIndex
 		}
 
-		if err := json.Unmarshal(data, &maxPosition); err != nil {
-			return fmt.Errorf("failed to unmarshal max position index: %w", err)
-		}
-
-		positionIndex := maxPosition.MaxIndex + 1
+		positionIndex := maxPosition.PositionIndexNumber + 1
 
 		positionRecord := map[string]interface{}{
 			"position_index_number": positionIndex,
-			"ethereaum_address":     accountAddress,
+			"ethereum_address":      accountAddress,
 			"contract_address":      event.Log.Address.Hex(),
 			"amount":                newAmount,
 			"position_start_height": event.Log.BlockNumber,

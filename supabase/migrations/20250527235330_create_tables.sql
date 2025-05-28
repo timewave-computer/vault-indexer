@@ -24,11 +24,7 @@ CREATE TABLE IF NOT EXISTS positions (
     is_terminated BOOLEAN NOT NULL DEFAULT FALSE,
     entry_method TEXT NOT NULL CHECK (entry_method IN ('deposit', 'transfer')),
     exit_method TEXT CHECK (exit_method IN ('withdraw', 'deposit', 'transfer')),
-    transaction_hash TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    
-    -- Add indexes for common queries
-    CONSTRAINT unique_position UNIQUE (contract_address, transaction_hash, position_start_height)
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Create indexes for common queries
