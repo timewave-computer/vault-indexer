@@ -1,0 +1,6 @@
+# Ignore all files in config/ directory
+config/*
+# But don't ignore config.env.yaml
+!config/config.env.yaml
+
+.DS_Store
