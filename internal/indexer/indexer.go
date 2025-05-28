@@ -2,7 +2,6 @@ package indexer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
@@ -28,6 +27,7 @@ type Indexer struct {
 	cancel            context.CancelFunc
 	positionChan      chan PositionEvent
 	positionProcessor *PositionProcessor
+	eventProcessor    *EventProcessor
 }
 
 func New(cfg *config.Config) (*Indexer, error) {
@@ -46,8 +46,9 @@ func New(cfg *config.Config) (*Indexer, error) {
 		return nil, fmt.Errorf("failed to connect to Supabase: %w", err)
 	}
 
-	// Create position processor
+	// Create processors
 	positionProcessor := NewPositionProcessor(db)
+	eventProcessor := NewEventProcessor(db, client)
 	positionChan := make(chan PositionEvent, 1000) // Buffer size of 1000 events
 
 	return &Indexer{
@@ -58,6 +59,7 @@ func New(cfg *config.Config) (*Indexer, error) {
 		cancel:            cancel,
 		positionChan:      positionChan,
 		positionProcessor: positionProcessor,
+		eventProcessor:    eventProcessor,
 	}, nil
 }
 
@@ -198,72 +200,11 @@ func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error 
 }
 
 func (i *Indexer) processEvent(vLog types.Log, event abi.Event, contractName string) error {
-	// Parse the event data
-	eventData := make(map[string]interface{})
-
-	// Handle indexed parameters (topics)
-	for i, input := range event.Inputs {
-		if input.Indexed {
-			// Skip the first topic as it's the event signature
-			if i+1 < len(vLog.Topics) {
-				// For indexed parameters, we need to handle them differently based on their type
-				var value interface{}
-				var err error
-
-				switch input.Type.T {
-				case abi.AddressTy:
-					value = common.BytesToAddress(vLog.Topics[i+1].Bytes())
-				case abi.IntTy, abi.UintTy:
-					value = new(big.Int).SetBytes(vLog.Topics[i+1].Bytes())
-				case abi.BoolTy:
-					value = vLog.Topics[i+1].Bytes()[0] != 0
-				case abi.BytesTy, abi.FixedBytesTy:
-					value = vLog.Topics[i+1].Bytes()
-				case abi.StringTy:
-					value = string(vLog.Topics[i+1].Bytes())
-				default:
-					return fmt.Errorf("unsupported indexed parameter type: %v", input.Type)
-				}
-
-				if err != nil {
-					return fmt.Errorf("failed to parse indexed parameter %s: %w", input.Name, err)
-				}
-				eventData[input.Name] = value
-			}
-		}
-	}
-
-	// Handle non-indexed parameters (data)
-	if err := event.Inputs.UnpackIntoMap(eventData, vLog.Data); err != nil {
-		return fmt.Errorf("failed to unpack event data: %w", err)
-	}
-
-	log.Printf("Event: %v", event)
-	log.Printf("Event data: %v", eventData)
-
-	// Convert event data to JSON for storage
-	eventJSON, err := json.Marshal(eventData)
+	// Process the event using the event processor
+	eventData, err := i.eventProcessor.ProcessEvent(vLog, event, contractName)
 	if err != nil {
-		return fmt.Errorf("failed to marshal event data: %w", err)
+		return fmt.Errorf("failed to process event: %w", err)
 	}
-
-	// Create the event record matching the database schema
-	eventRecord := map[string]interface{}{
-		"contract_address": vLog.Address.Hex(),
-		"event_name":       event.Name,
-		"block_number":     vLog.BlockNumber,
-		"transaction_hash": vLog.TxHash.Hex(),
-		"log_index":        vLog.Index,
-		"raw_data":         string(eventJSON),
-	}
-	log.Printf("Event record: %v", eventRecord)
-
-	// Insert into Supabase
-	_, _, err = i.db.From("events").Insert(eventRecord, false, "", "", "").Execute()
-	if err != nil {
-		return fmt.Errorf("failed to insert event into database: %w", err)
-	}
-	log.Printf("Inserted event into Supabase: %v", eventRecord)
 
 	// Send event to position processor if it's a position-related event
 	if event.Name == "Deposit" || event.Name == "Withdraw" || event.Name == "Transfer" {
@@ -286,6 +227,7 @@ func (i *Indexer) Stop() error {
 	i.cancel()
 	i.client.Close()
 	i.positionProcessor.Stop()
+	i.eventProcessor.Stop()
 	close(i.positionChan)
 	return nil
 }
