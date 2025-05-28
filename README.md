@@ -25,10 +25,23 @@ go mod tidy
 start docker
 ```bash
 npx supabase start
+npx supabase status
 
 # deploy schema to DB
 npx supabase migration up
+
+# to reset
+npx supabase db reset
+
+# reset system
+npx supabase stop
+docker network prune
+
 ```
+
+3. set config in `config/config.dev.toml`
+- add contracts info + abis
+- check supabase local studio (http://127.0.0.1:54323) for anon key and connection string
 
 3. run server
 ```bash
