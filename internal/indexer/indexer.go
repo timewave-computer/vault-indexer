@@ -19,12 +19,15 @@ import (
 	"github.com/timewave/vault-indexer/internal/config"
 )
 
+// Indexer handles blockchain event indexing and position tracking
 type Indexer struct {
-	config *config.Config
-	client *ethclient.Client
-	db     *supa.Client
-	ctx    context.Context
-	cancel context.CancelFunc
+	config            *config.Config
+	client            *ethclient.Client
+	db                *supa.Client
+	ctx               context.Context
+	cancel            context.CancelFunc
+	positionChan      chan PositionEvent
+	positionProcessor *PositionProcessor
 }
 
 func New(cfg *config.Config) (*Indexer, error) {
@@ -43,17 +46,26 @@ func New(cfg *config.Config) (*Indexer, error) {
 		return nil, fmt.Errorf("failed to connect to Supabase: %w", err)
 	}
 
+	// Create position processor
+	positionProcessor := NewPositionProcessor(db)
+	positionChan := make(chan PositionEvent, 1000) // Buffer size of 1000 events
+
 	return &Indexer{
-		config: cfg,
-		client: client,
-		db:     db,
-		ctx:    ctx,
-		cancel: cancel,
+		config:            cfg,
+		client:            client,
+		db:                db,
+		ctx:               ctx,
+		cancel:            cancel,
+		positionChan:      positionChan,
+		positionProcessor: positionProcessor,
 	}, nil
 }
 
 func (i *Indexer) Start() error {
 	log.Println("Starting indexer...")
+
+	// Start position processor
+	i.positionProcessor.Start(i.positionChan)
 
 	// Perform health check by getting current block height
 	blockNumber, err := i.client.BlockNumber(i.ctx)
@@ -253,133 +265,17 @@ func (i *Indexer) processEvent(vLog types.Log, event abi.Event, contractName str
 	}
 	log.Printf("Inserted event into Supabase: %v", eventRecord)
 
-	// Transform event to position if applicable
-	if err := i.transformEventToPosition(event.Name, eventData, vLog); err != nil {
-		log.Printf("Warning: failed to transform event to position: %v", err)
-	}
-
-	return nil
-}
-
-func (i *Indexer) transformEventToPosition(eventName string, eventData map[string]interface{}, vLog types.Log) error {
-	var accountAddress string
-	var amount float64
-	var entryMethod string
-	var exitMethod string
-
-	// Handle different event types
-	switch eventName {
-	case "Deposit":
-		if owner, ok := eventData["sender"].(common.Address); ok {
-			accountAddress = owner.Hex()
+	// Send event to position processor if it's a position-related event
+	if event.Name == "Deposit" || event.Name == "Withdraw" || event.Name == "Transfer" {
+		select {
+		case i.positionChan <- PositionEvent{
+			EventName: event.Name,
+			EventData: eventData,
+			Log:       vLog,
+		}:
+		case <-i.ctx.Done():
+			return fmt.Errorf("context cancelled while sending event to position processor")
 		}
-		if assets, ok := eventData["assets"].(*big.Int); ok {
-			amount = float64(assets.Int64())
-		}
-		entryMethod = "deposit"
-		exitMethod = "deposit"
-
-	case "Transfer":
-		if to, ok := eventData["from"].(common.Address); ok {
-			accountAddress = to.Hex()
-		}
-		if value, ok := eventData["value"].(*big.Int); ok {
-			amount = float64(value.Int64())
-		}
-		entryMethod = "transfer"
-		exitMethod = "transfer"
-
-	case "Withdraw":
-		if owner, ok := eventData["sender"].(common.Address); ok {
-			accountAddress = owner.Hex()
-		}
-		if assets, ok := eventData["assets"].(*big.Int); ok {
-			amount = -float64(assets.Int64())
-		}
-		exitMethod = "withdraw"
-	default:
-		return nil
-	}
-
-	if accountAddress == "" {
-		return fmt.Errorf("could not determine account address from event data")
-	}
-
-	// Get current position if it exists
-	var currentPosition struct {
-		PositionIndexNumber int64   `json:"position_index_number"`
-		Amount              float64 `json:"amount"`
-		PositionEndHeight   *int64  `json:"position_end_height"`
-	}
-	_, _, err := i.db.From("positions").
-		Select("position_index_number,amount,position_end_height", "", false).
-		Eq("account_address", accountAddress).
-		Eq("contract_address", vLog.Address.Hex()).
-		Is("position_end_height", "null").
-		Single().
-		Execute()
-
-	// Calculate new amount
-	newAmount := amount
-	if err == nil {
-		newAmount += currentPosition.Amount
-	}
-
-	// Close current position if it exists
-	if err == nil {
-		endHeight := int64(vLog.BlockNumber - 1)
-		_, _, err = i.db.From("positions").
-			Update(map[string]interface{}{
-				"position_end_height": endHeight,
-				"exit_method":         exitMethod,
-				"is_terminated":       newAmount == 0,
-			}, "", "").
-			Eq("position_index_number", fmt.Sprintf("%d", currentPosition.PositionIndexNumber)).
-			Execute()
-		if err != nil {
-			return fmt.Errorf("failed to close current position: %w", err)
-		}
-	}
-
-	// Create new position if amount is not zero
-	if newAmount != 0 {
-		// Get the highest position index
-		var maxPosition struct {
-			MaxIndex int64 `json:"max_index"`
-		}
-		_, _, err = i.db.From("positions").
-			Select("max(position_index_number) as max_index", "", false).
-			Single().
-			Execute()
-		if err != nil {
-			return fmt.Errorf("failed to get max position index: %w", err)
-		}
-
-		if err := json.Unmarshal(result, &maxPosition); err != nil {
-			return fmt.Errorf("failed to unmarshal max position index: %w", err)
-		}
-
-		positionIndex := maxPosition.MaxIndex + 1
-
-		positionRecord := map[string]interface{}{
-			"position_index_number": positionIndex,
-			"ethereaum_address":     accountAddress,
-			"contract_address":      vLog.Address.Hex(),
-			"amount":                newAmount,
-			"position_start_height": vLog.BlockNumber,
-			"position_end_height":   nil,
-			"entry_method":          entryMethod,
-			"exit_method":           nil,
-			"is_terminated":         false,
-			"neutron_address":       nil, // TODO: Add neutron address handling when available
-		}
-
-		_, _, err = i.db.From("positions").Insert(positionRecord, false, "", "", "").Execute()
-		if err != nil {
-			return fmt.Errorf("failed to create new position: %w", err)
-		}
-
-		log.Printf("Created new position for account %s: amount = %f, index = %d", accountAddress, newAmount, positionIndex)
 	}
 
 	return nil
@@ -389,6 +285,7 @@ func (i *Indexer) Stop() error {
 	log.Println("Stopping indexer...")
 	i.cancel()
 	i.client.Close()
-	// Supabase client doesn't need explicit cleanup
+	i.positionProcessor.Stop()
+	close(i.positionChan)
 	return nil
 }
