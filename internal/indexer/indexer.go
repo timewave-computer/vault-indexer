@@ -55,8 +55,6 @@ func New(cfg *config.Config) (*Indexer, error) {
 func (i *Indexer) Start() error {
 	log.Println("Starting indexer...")
 
-	// Process historical events
-
 	// Perform health check by getting current block height
 	blockNumber, err := i.client.BlockNumber(i.ctx)
 	if err != nil {
@@ -64,19 +62,25 @@ func (i *Indexer) Start() error {
 	}
 	log.Printf("Health check successful - Current block height: %d", blockNumber)
 
-	// Process each contract
+	// Process historical events for each contract
 	for _, contract := range i.config.Contracts {
-		if err := i.processContract(contract); err != nil {
-			return fmt.Errorf("failed to process contract %s: %w", contract.Name, err)
+		if err := i.processHistoricalEvents(contract); err != nil {
+			return fmt.Errorf("failed to process historical events for contract %s: %w", contract.Name, err)
 		}
 	}
 
-	// TODO: subscribe to new events
+	// Set up subscriptions for new events
+	for _, contract := range i.config.Contracts {
+		if err := i.setupEventSubscriptions(contract); err != nil {
+			return fmt.Errorf("failed to set up event subscriptions for contract %s: %w", contract.Name, err)
+		}
+	}
 
 	return nil
 }
 
-func (i *Indexer) processContract(contract config.ContractConfig) error {
+// processHistoricalEvents processes all historical events for a contract
+func (i *Indexer) processHistoricalEvents(contract config.ContractConfig) error {
 	// Load ABI
 	abiPath := filepath.Join("abis", contract.ABIPath)
 	abiBytes, err := os.ReadFile(abiPath)
@@ -128,6 +132,25 @@ func (i *Indexer) processContract(contract config.ContractConfig) error {
 		}
 	}
 
+	return nil
+}
+
+// setupEventSubscriptions sets up subscriptions for new events
+func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error {
+	// Load ABI
+	abiPath := filepath.Join("abis", contract.ABIPath)
+	abiBytes, err := os.ReadFile(abiPath)
+	if err != nil {
+		return fmt.Errorf("failed to read ABI file: %w", err)
+	}
+
+	parsedABI, err := abi.JSON(strings.NewReader(string(abiBytes)))
+	if err != nil {
+		return fmt.Errorf("failed to parse ABI: %w", err)
+	}
+
+	contractAddress := common.HexToAddress(contract.Address)
+
 	// Set up event subscription for new events
 	for _, eventName := range contract.Events {
 		event := parsedABI.Events[eventName]
@@ -165,9 +188,46 @@ func (i *Indexer) processContract(contract config.ContractConfig) error {
 func (i *Indexer) processEvent(vLog types.Log, event abi.Event, contractName string) error {
 	// Parse the event data
 	eventData := make(map[string]interface{})
+
+	// Handle indexed parameters (topics)
+	for i, input := range event.Inputs {
+		if input.Indexed {
+			// Skip the first topic as it's the event signature
+			if i+1 < len(vLog.Topics) {
+				// For indexed parameters, we need to handle them differently based on their type
+				var value interface{}
+				var err error
+
+				switch input.Type.T {
+				case abi.AddressTy:
+					value = common.BytesToAddress(vLog.Topics[i+1].Bytes())
+				case abi.IntTy, abi.UintTy:
+					value = new(big.Int).SetBytes(vLog.Topics[i+1].Bytes())
+				case abi.BoolTy:
+					value = vLog.Topics[i+1].Bytes()[0] != 0
+				case abi.BytesTy, abi.FixedBytesTy:
+					value = vLog.Topics[i+1].Bytes()
+				case abi.StringTy:
+					value = string(vLog.Topics[i+1].Bytes())
+				default:
+					return fmt.Errorf("unsupported indexed parameter type: %v", input.Type)
+				}
+
+				if err != nil {
+					return fmt.Errorf("failed to parse indexed parameter %s: %w", input.Name, err)
+				}
+				eventData[input.Name] = value
+			}
+		}
+	}
+
+	// Handle non-indexed parameters (data)
 	if err := event.Inputs.UnpackIntoMap(eventData, vLog.Data); err != nil {
 		return fmt.Errorf("failed to unpack event data: %w", err)
 	}
+
+	log.Printf("Event: %v", event)
+	log.Printf("Event data: %v", eventData)
 
 	// Convert event data to JSON for storage
 	eventJSON, err := json.Marshal(eventData)
@@ -210,29 +270,33 @@ func (i *Indexer) transformEventToPosition(eventName string, eventData map[strin
 	// Handle different event types
 	switch eventName {
 	case "Deposit":
-		if owner, ok := eventData["owner"].(common.Address); ok {
+		if owner, ok := eventData["sender"].(common.Address); ok {
 			accountAddress = owner.Hex()
 		}
 		if assets, ok := eventData["assets"].(*big.Int); ok {
 			amount = float64(assets.Int64())
 		}
 		entryMethod = "deposit"
-	case "Withdraw":
-		if owner, ok := eventData["owner"].(common.Address); ok {
-			accountAddress = owner.Hex()
-		}
-		if assets, ok := eventData["assets"].(*big.Int); ok {
-			amount = -float64(assets.Int64())
-		}
-		exitMethod = "withdraw"
+		exitMethod = "deposit"
+
 	case "Transfer":
-		if to, ok := eventData["to"].(common.Address); ok {
+		if to, ok := eventData["from"].(common.Address); ok {
 			accountAddress = to.Hex()
 		}
 		if value, ok := eventData["value"].(*big.Int); ok {
 			amount = float64(value.Int64())
 		}
 		entryMethod = "transfer"
+		exitMethod = "transfer"
+
+	case "Withdraw":
+		if owner, ok := eventData["sender"].(common.Address); ok {
+			accountAddress = owner.Hex()
+		}
+		if assets, ok := eventData["assets"].(*big.Int); ok {
+			amount = -float64(assets.Int64())
+		}
+		exitMethod = "withdraw"
 	default:
 		return nil
 	}
@@ -284,18 +348,22 @@ func (i *Indexer) transformEventToPosition(eventName string, eventData map[strin
 			MaxIndex int64 `json:"max_index"`
 		}
 		_, _, err = i.db.From("positions").
-			Select("COALESCE(MAX(position_index_number), 0) as max_index", "", false).
+			Select("max(position_index_number) as max_index", "", false).
 			Single().
 			Execute()
 		if err != nil {
 			return fmt.Errorf("failed to get max position index: %w", err)
 		}
 
+		if err := json.Unmarshal(result, &maxPosition); err != nil {
+			return fmt.Errorf("failed to unmarshal max position index: %w", err)
+		}
+
 		positionIndex := maxPosition.MaxIndex + 1
 
 		positionRecord := map[string]interface{}{
 			"position_index_number": positionIndex,
-			"account_address":       accountAddress,
+			"ethereaum_address":     accountAddress,
 			"contract_address":      vLog.Address.Hex(),
 			"amount":                newAmount,
 			"position_start_height": vLog.BlockNumber,
