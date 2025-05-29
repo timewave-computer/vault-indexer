@@ -22,13 +22,21 @@ type PositionEvent struct {
 
 // Position represents a position record in the database
 type Position struct {
-	ID                int64       `json:"id"`
-	Amount            json.Number `json:"amount"`
-	PositionEndHeight *int64      `json:"position_end_height"`
+	ID                  int64       `json:"id"`
+	Amount              json.Number `json:"amount"`
+	PositionEndHeight   *int64      `json:"position_end_height"`
+	EntryMethod         string      `json:"entry_method"`
+	ExitMethod          *string     `json:"exit_method"`
+	IsTerminated        bool        `json:"is_terminated"`
+	NeutronAddress      *string     `json:"neutron_address"`
+	PositionStartHeight int64       `json:"position_start_height"`
+	EthereumAddress     string      `json:"ethereum_address"`
+	ContractAddress     string      `json:"contract_address"`
 }
 
 // PositionUpdate represents a position record to be upserted
 type PositionUpdate struct {
+	Id                  *int64
 	EthereumAddress     string
 	ContractAddress     string
 	Amount              string
@@ -184,6 +192,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 		}
 
 		entryMethod = "deposit"
+		exitMethod = "deposit"
 
 	case "Transfer":
 		if to, ok := event.EventData["from"].(common.Address); ok {
@@ -193,6 +202,9 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 			amount = value.String()
 		}
 		entryMethod = "transfer"
+		exitMethod = "transfer"
+
+		// TODO: update 2 positions (from + to)
 
 	case "Withdraw":
 		if owner, ok := event.EventData["sender"].(common.Address); ok {
@@ -230,12 +242,13 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 	if currentPosition != nil {
 		endHeight := uint64(event.Log.BlockNumber - 1)
 		updates = append(updates, PositionUpdate{
+			Id:                  &currentPosition.ID,
 			EthereumAddress:     ethereumAddress,
 			ContractAddress:     event.Log.Address.Hex(),
 			Amount:              currentPosition.Amount.String(),
-			PositionStartHeight: uint64(event.Log.BlockNumber),
+			PositionStartHeight: uint64(currentPosition.PositionStartHeight),
 			PositionEndHeight:   &endHeight,
-			EntryMethod:         entryMethod,
+			EntryMethod:         currentPosition.EntryMethod,
 			ExitMethod:          &exitMethod,
 			IsTerminated:        newAmount == "0",
 			NeutronAddress:      nil,

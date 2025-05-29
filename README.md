@@ -61,6 +61,7 @@ docker network prune
 ```
 
 ## Testing
-```
+```bash
+go test ./...  
 go test ./internal/indexer -v
 ```
