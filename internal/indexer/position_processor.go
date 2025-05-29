@@ -116,13 +116,19 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
 		Amount              string `json:"amount"`
 		PositionEndHeight   *int64 `json:"position_end_height"`
 	}
-	_, _, err := p.db.From("positions").
+	data, _, err := p.db.From("positions").
 		Select("position_index_number,amount,position_end_height", "", false).
 		Eq("ethereum_address", ethereumAddress).
 		Eq("contract_address", event.Log.Address.Hex()).
 		Is("position_end_height", "null").
 		Single().
 		Execute()
+
+	if err == nil {
+		if err := json.Unmarshal(data, &currentPosition); err != nil {
+			return fmt.Errorf("failed to unmarshal current position: %w", err)
+		}
+	}
 
 	// Calculate new amount
 	newAmount := amount
