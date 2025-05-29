@@ -30,7 +30,7 @@
 
 ```jsx
  Position {
-	position_index_number: number // incrementing counter
+	id: number // incrementing counter
 	ethereum_address: string
 	neutron_address: string | null // neutron address recorded for withdraw
 	position_start_height: number // block number position was created
@@ -69,10 +69,10 @@ evm_address: string (optional) // option to filter positions by a user address
 ```jsx
 {
 	data: [
-		[
+		
 		  { 
 			  // user1 deposited 1000, closed by second deposit
-		    "position_index_number": 1,
+		    "id": 1,
 		    "ethereum_address": "0xUserAddress1",
 		    "neutron_address": null,
 		    "position_start_height": 18000000,
@@ -84,7 +84,7 @@ evm_address: string (optional) // option to filter positions by a user address
 		  },
 		  {
 			 // user1 deposited another 1000, no withdraw or transfer
-		    "position_index_number": 2,
+		    "position_ind`id": 2,
 		    "ethereum_address": "0xUserAddress1",
 		    "neutron_address": null,
 		    "position_start_height": 18000101,
@@ -97,7 +97,7 @@ evm_address: string (optional) // option to filter positions by a user address
 		  },
 		  // user2 deposited 1000 and withdrew
 		  {
-		    "position_index_number": 3,
+		    "id": 3,
 		    "ethereum_address": "0xUserAddress2",
 		    "neutron_address": "neutron1abc...",
 		    "position_start_height": 18010000,

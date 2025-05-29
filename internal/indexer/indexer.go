@@ -2,13 +2,13 @@ package indexer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -19,12 +19,17 @@ import (
 	"github.com/timewave/vault-indexer/internal/config"
 )
 
+// Indexer handles blockchain event indexing and position tracking
 type Indexer struct {
-	config *config.Config
-	client *ethclient.Client
-	db     *supa.Client
-	ctx    context.Context
-	cancel context.CancelFunc
+	config            *config.Config
+	client            *ethclient.Client
+	db                *supa.Client
+	ctx               context.Context
+	cancel            context.CancelFunc
+	positionChan      chan PositionEvent
+	positionProcessor *PositionProcessor
+	eventProcessor    *EventProcessor
+	wg                sync.WaitGroup
 }
 
 func New(cfg *config.Config) (*Indexer, error) {
@@ -43,19 +48,30 @@ func New(cfg *config.Config) (*Indexer, error) {
 		return nil, fmt.Errorf("failed to connect to Supabase: %w", err)
 	}
 
+	// Create processors
+	eventProcessor := NewEventProcessor(db, client)
+	positionChan := make(chan PositionEvent, 1000) // Buffer size of 1000 events
+	positionProcessor := NewPositionProcessor(db)
+
 	return &Indexer{
-		config: cfg,
-		client: client,
-		db:     db,
-		ctx:    ctx,
-		cancel: cancel,
+		config:            cfg,
+		client:            client,
+		db:                db,
+		ctx:               ctx,
+		cancel:            cancel,
+		positionChan:      positionChan,
+		positionProcessor: positionProcessor,
+		eventProcessor:    eventProcessor,
 	}, nil
 }
 
 func (i *Indexer) Start() error {
 	log.Println("Starting indexer...")
 
-	// Process historical events
+	// Start position processor
+	if err := i.positionProcessor.Start(i.positionChan); err != nil {
+		return fmt.Errorf("failed to start position processor: %w", err)
+	}
 
 	// Perform health check by getting current block height
 	blockNumber, err := i.client.BlockNumber(i.ctx)
@@ -64,19 +80,29 @@ func (i *Indexer) Start() error {
 	}
 	log.Printf("Health check successful - Current block height: %d", blockNumber)
 
-	// Process each contract
+	// Process historical events for each contract
 	for _, contract := range i.config.Contracts {
-		if err := i.processContract(contract); err != nil {
-			return fmt.Errorf("failed to process contract %s: %w", contract.Name, err)
+		if err := i.processHistoricalEvents(contract); err != nil {
+			return fmt.Errorf("failed to process historical events for contract %s: %w", contract.Name, err)
 		}
 	}
 
-	// TODO: subscribe to new events
+	// TODO: there is a window here where there might be new events that are missed while processing historical events.
+	// add a check to see if there are any new events since the last time we processed historical events.
+	// OR set up subscriptions immediately so the queue can fill, but only process them after historical events are processed.
+
+	// AFTER all historical events have been processed, set up subscriptions for new events
+	for _, contract := range i.config.Contracts {
+		if err := i.setupEventSubscriptions(contract); err != nil {
+			return fmt.Errorf("failed to set up event subscriptions for contract %s: %w", contract.Name, err)
+		}
+	}
 
 	return nil
 }
 
-func (i *Indexer) processContract(contract config.ContractConfig) error {
+// processHistoricalEvents processes all historical events for a contract
+func (i *Indexer) processHistoricalEvents(contract config.ContractConfig) error {
 	// Load ABI
 	abiPath := filepath.Join("abis", contract.ABIPath)
 	abiBytes, err := os.ReadFile(abiPath)
@@ -128,6 +154,25 @@ func (i *Indexer) processContract(contract config.ContractConfig) error {
 		}
 	}
 
+	return nil
+}
+
+// setupEventSubscriptions sets up subscriptions for new events
+func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error {
+	// Load ABI
+	abiPath := filepath.Join("abis", contract.ABIPath)
+	abiBytes, err := os.ReadFile(abiPath)
+	if err != nil {
+		return fmt.Errorf("failed to read ABI file: %w", err)
+	}
+
+	parsedABI, err := abi.JSON(strings.NewReader(string(abiBytes)))
+	if err != nil {
+		return fmt.Errorf("failed to parse ABI: %w", err)
+	}
+
+	contractAddress := common.HexToAddress(contract.Address)
+
 	// Set up event subscription for new events
 	for _, eventName := range contract.Events {
 		event := parsedABI.Events[eventName]
@@ -142,7 +187,9 @@ func (i *Indexer) processContract(contract config.ContractConfig) error {
 			return fmt.Errorf("failed to subscribe to logs: %w", err)
 		}
 
+		i.wg.Add(1)
 		go func() {
+			defer i.wg.Done() // decrements waitgroup after goroutine finishes
 			for {
 				select {
 				case err := <-sub.Err():
@@ -163,43 +210,45 @@ func (i *Indexer) processContract(contract config.ContractConfig) error {
 }
 
 func (i *Indexer) processEvent(vLog types.Log, event abi.Event, contractName string) error {
-	// Parse the event data
-	eventData := make(map[string]interface{})
-	if err := event.Inputs.UnpackIntoMap(eventData, vLog.Data); err != nil {
-		return fmt.Errorf("failed to unpack event data: %w", err)
-	}
-
-	// Convert event data to JSON for storage
-	eventJSON, err := json.Marshal(eventData)
+	// Process the event using the event processor
+	eventData, err := i.eventProcessor.ProcessEvent(vLog, event, contractName)
 	if err != nil {
-		return fmt.Errorf("failed to marshal event data: %w", err)
+		return fmt.Errorf("failed to process event: %w", err)
 	}
 
-	// Create the event record matching the database schema
-	eventRecord := map[string]interface{}{
-		"contract_address": vLog.Address.Hex(),
-		"event_name":       event.Name,
-		"block_number":     vLog.BlockNumber,
-		"transaction_hash": vLog.TxHash.Hex(),
-		"log_index":        vLog.Index,
-		"raw_data":         string(eventJSON),
+	// Send event to position processor if it's a position-related event
+	if event.Name == "Deposit" || event.Name == "Withdraw" || event.Name == "Transfer" {
+		select {
+		case i.positionChan <- PositionEvent{
+			EventName: event.Name,
+			EventData: eventData,
+			Log:       vLog,
+		}:
+		case <-i.ctx.Done():
+			return fmt.Errorf("context cancelled while sending event to position processor")
+		}
 	}
-	log.Printf("Event record: %v", eventRecord)
-
-	// Insert into Supabase
-	_, _, err = i.db.From("events").Insert(eventRecord, false, "", "", "").Execute()
-	if err != nil {
-		return fmt.Errorf("failed to insert event into database: %w", err)
-	}
-	log.Printf("Inserted event into Supabase: %v", eventRecord)
 
 	return nil
 }
 
 func (i *Indexer) Stop() error {
 	log.Println("Stopping indexer...")
+
+	// signal writers to stop
 	i.cancel()
+
+	// close channel so the reader goroutine can exit gracefully
+	close(i.positionChan)
+
+	// wait until all goroutines finish
+	i.wg.Wait()
+
+	// stop processors
+	i.positionProcessor.Stop()
+	i.eventProcessor.Stop()
+
+	// finally release external resources
 	i.client.Close()
-	// Supabase client doesn't need explicit cleanup
 	return nil
 }
