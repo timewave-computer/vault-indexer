@@ -112,12 +112,12 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
 
 	// Get current position if it exists
 	var currentPosition struct {
-		PositionIndexNumber int64       `json:"position_index_number"`
-		Amount              json.Number `json:"amount"`
-		PositionEndHeight   *int64      `json:"position_end_height"`
+		Id                int64       `json:"id"`
+		Amount            json.Number `json:"amount"`
+		PositionEndHeight *int64      `json:"position_end_height"`
 	}
 	data, _, err := p.db.From("positions").
-		Select("position_index_number,amount,position_end_height", "", false).
+		Select("id,amount,position_end_height", "", false).
 		Eq("ethereum_address", ethereumAddress).
 		Eq("contract_address", event.Log.Address.Hex()).
 		Is("position_end_height", "null").
@@ -151,7 +151,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
 				"exit_method":         exitMethod,
 				"is_terminated":       newAmount == "0",
 			}, "", "").
-			Eq("position_index_number", fmt.Sprintf("%d", currentPosition.PositionIndexNumber)).
+			Eq("id", fmt.Sprintf("%d", currentPosition.Id)).
 			Execute()
 		if err != nil {
 			return fmt.Errorf("failed to close current position: %w", err)
