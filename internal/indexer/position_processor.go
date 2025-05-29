@@ -112,9 +112,9 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
 
 	// Get current position if it exists
 	var currentPosition struct {
-		PositionIndexNumber int64  `json:"position_index_number"`
-		Amount              string `json:"amount"`
-		PositionEndHeight   *int64 `json:"position_end_height"`
+		PositionIndexNumber int64       `json:"position_index_number"`
+		Amount              json.Number `json:"amount"`
+		PositionEndHeight   *int64      `json:"position_end_height"`
 	}
 	data, _, err := p.db.From("positions").
 		Select("position_index_number,amount,position_end_height", "", false).
@@ -135,7 +135,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
 	if err == nil {
 		// Add the current amount to the new amount using big.Int
 		currentBigInt := new(big.Int)
-		currentBigInt.SetString(currentPosition.Amount, 10)
+		currentBigInt.SetString(currentPosition.Amount.String(), 10)
 		newBigInt := new(big.Int)
 		newBigInt.SetString(amount, 10)
 		newBigInt.Add(currentBigInt, newBigInt)
@@ -160,42 +160,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
 
 	// Create new position if amount is not zero
 	if newAmount != "0" {
-		// Get the highest position index
-		var maxPosition struct {
-			PositionIndexNumber int64 `json:"position_index_number"`
-		}
-		data, _, err := p.db.From("positions").
-			Select("position_index_number", "", false).
-			Execute()
-		if err != nil {
-			// If no positions exist yet, start with index 0
-			if err.Error() == "(PGRST204) Results contain 0 rows" {
-				maxPosition.PositionIndexNumber = 0
-			} else {
-				return fmt.Errorf("failed to get max position index: %w", err)
-			}
-		} else {
-			var positions []struct {
-				PositionIndexNumber int64 `json:"position_index_number"`
-			}
-			if err := json.Unmarshal(data, &positions); err != nil {
-				return fmt.Errorf("failed to unmarshal positions: %w", err)
-			}
-
-			// Find the maximum position index
-			maxIndex := int64(0)
-			for _, pos := range positions {
-				if pos.PositionIndexNumber > maxIndex {
-					maxIndex = pos.PositionIndexNumber
-				}
-			}
-			maxPosition.PositionIndexNumber = maxIndex
-		}
-
-		positionIndex := maxPosition.PositionIndexNumber + 1
-
 		positionRecord := map[string]interface{}{
-			"position_index_number": positionIndex,
 			"ethereum_address":      ethereumAddress,
 			"contract_address":      event.Log.Address.Hex(),
 			"amount":                newAmount,
@@ -212,7 +177,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
 			return fmt.Errorf("failed to create new position: %w", err)
 		}
 
-		log.Printf("Created new position for account %s: amount = %s, index = %d", ethereumAddress, newAmount, positionIndex)
+		log.Printf("Created new position for account %s: amount = %s, index = %d", positionRecord["ethereum_address"], positionRecord["amount"])
 	}
 
 	return nil

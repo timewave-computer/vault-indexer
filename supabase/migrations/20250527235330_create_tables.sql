@@ -1,6 +1,6 @@
 -- Events table to store raw blockchain events
 CREATE TABLE IF NOT EXISTS events (
-    id SERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     contract_address TEXT NOT NULL,
     event_name TEXT NOT NULL,
     block_number BIGINT NOT NULL,
@@ -14,7 +14,6 @@ CREATE TABLE IF NOT EXISTS events (
 -- Create positions table
 CREATE TABLE IF NOT EXISTS positions (
     id BIGSERIAL PRIMARY KEY,
-    position_index_number BIGINT NOT NULL,
     contract_address TEXT NOT NULL,
     ethereum_address TEXT NOT NULL,
     neutron_address TEXT,

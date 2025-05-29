@@ -95,7 +95,6 @@ func (e *EventProcessor) ProcessEvent(vLog types.Log, event abi.Event, contractN
 		"log_index":        vLog.Index,
 		"raw_data":         eventJSON,
 	}
-	log.Printf("Event record: %v", eventRecord)
 
 	// Insert into Supabase
 	_, _, err = e.db.From("events").Insert(eventRecord, false, "", "", "").Execute()
