@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS positions (
     position_end_height BIGINT,
     amount TEXT NOT NULL,
     is_terminated BOOLEAN NOT NULL DEFAULT FALSE,
+    is_deposit BOOLEAN NOT NULL DEFAULT FALSE,
+    is_withdraw BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

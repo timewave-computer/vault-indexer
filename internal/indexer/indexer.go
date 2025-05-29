@@ -145,9 +145,11 @@ func (i *Indexer) processHistoricalEvents(contract config.ContractConfig) error 
 		if err != nil {
 			return fmt.Errorf("failed to get logs: %w", err)
 		}
+		log.Printf("Found %d logs for event %s", len(logs), eventName)
 
 		// Process each log
 		for _, vLog := range logs {
+			log.Printf("Processing log - Block: %d, TxHash: %s, Topics: %v", vLog.BlockNumber, vLog.TxHash.Hex(), vLog.Topics)
 			if err := i.processEvent(vLog, event, contract.Name); err != nil {
 				return fmt.Errorf("failed to process event: %w", err)
 			}
@@ -217,7 +219,7 @@ func (i *Indexer) processEvent(vLog types.Log, event abi.Event, contractName str
 	}
 
 	// Send event to position processor if it's a position-related event
-	if event.Name == "Deposit" || event.Name == "Withdraw" || event.Name == "Transfer" {
+	if event.Name == "Deposit" || event.Name == "WithdrawRequested" || event.Name == "Transfer" {
 		select {
 		case i.positionChan <- PositionEvent{
 			EventName: event.Name,

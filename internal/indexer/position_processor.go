@@ -41,6 +41,8 @@ type PositionUpdate struct {
 	PositionStartHeight uint64
 	PositionEndHeight   *uint64
 	IsTerminated        bool
+	IsDeposit           bool
+	IsWithdraw          bool
 	NeutronAddress      *string
 }
 
@@ -87,8 +89,8 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 					if to, ok := event.EventData["to"].(common.Address); ok {
 						ethereumAddress = to.Hex()
 					}
-				case "Withdraw":
-					if owner, ok := event.EventData["sender"].(common.Address); ok {
+				case "WithdrawRequested":
+					if owner, ok := event.EventData["owner"].(common.Address); ok {
 						ethereumAddress = owner.Hex()
 					}
 				}
@@ -131,6 +133,7 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 								"position_end_height": update.PositionEndHeight,
 								"is_terminated":       update.IsTerminated,
 								"neutron_address":     update.NeutronAddress,
+								"is_withdraw":         update.IsWithdraw,
 							}, "", "").
 							Eq("id", fmt.Sprintf("%d", *update.Id)).
 							Execute()
@@ -148,6 +151,8 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 							"position_end_height":   update.PositionEndHeight,
 							"is_terminated":         update.IsTerminated,
 							"neutron_address":       update.NeutronAddress,
+							"is_deposit":            update.IsDeposit,
+							"is_withdraw":           update.IsWithdraw,
 						}, false, "", "", "").Execute()
 						if err != nil {
 							log.Printf("Error inserting new position: %v", err)
@@ -173,6 +178,10 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 	var ethereumAddress string
 	var amount string
 	var neutronAddress *string
+	var isDeposit = false
+	var isWithdraw = false
+
+	log.Printf("Processing position event: %v, currentPosition: %v", event, currentPosition)
 
 	// Handle different event types
 	switch event.EventName {
@@ -183,18 +192,9 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 		if assets, ok := event.EventData["assets"].(*big.Int); ok {
 			amount = assets.String()
 		}
+		isDeposit = true
 
-	case "Transfer":
-		if to, ok := event.EventData["from"].(common.Address); ok {
-			ethereumAddress = to.Hex()
-		}
-		if value, ok := event.EventData["value"].(*big.Int); ok {
-			amount = value.String()
-		}
-
-		// TODO: update 2 positions (from + to)
-
-	case "Withdraw":
+	case "WithdrawRequested":
 		if currentPosition == nil {
 			return []PositionUpdate{}, nil
 		}
@@ -209,6 +209,25 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 			negAssets := new(big.Int).Neg(assets)
 			amount = negAssets.String()
 		}
+		isWithdraw = true
+
+	case "Transfer":
+		if to, ok := event.EventData["from"].(common.Address); ok {
+			ethereumAddress = to.Hex()
+		}
+		if value, ok := event.EventData["value"].(*big.Int); ok {
+			amount = value.String()
+		}
+
+		// Skip if from or to address is zero address
+		from, fromOk := event.EventData["from"].(common.Address)
+		to, toOk := event.EventData["to"].(common.Address)
+		if (fromOk && from == common.HexToAddress("0x0000000000000000000000000000000000000000")) ||
+			(toOk && to == common.HexToAddress("0x0000000000000000000000000000000000000000")) {
+			return nil, nil
+		}
+
+		// TODO: update 2 positions (from + to)
 
 	default:
 		return nil, nil
@@ -244,12 +263,14 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 			PositionEndHeight:   &endHeight,
 			IsTerminated:        newAmount == "0",
 			NeutronAddress:      neutronAddress,
+			IsDeposit:           isDeposit,
+			IsWithdraw:          isWithdraw,
 		})
 	}
 
 	// Create new position if amount is not zero
 	if newAmount != "0" {
-		updates = append(updates, PositionUpdate{
+		var newPosition = PositionUpdate{
 			EthereumAddress:     ethereumAddress,
 			ContractAddress:     event.Log.Address.Hex(),
 			Amount:              newAmount,
@@ -257,8 +278,14 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 			PositionEndHeight:   nil,
 			IsTerminated:        false,
 			NeutronAddress:      nil,
-		})
+			IsDeposit:           isDeposit,
+			IsWithdraw:          isWithdraw,
+		}
+
+		updates = append(updates, newPosition)
 	}
+
+	log.Printf("Making Updates EVENTNAME: %v, updates: %v", event.EventName, updates)
 
 	return updates, nil
 }
