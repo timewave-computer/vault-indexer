@@ -50,8 +50,8 @@ func New(cfg *config.Config) (*Indexer, error) {
 
 	// Create processors
 	eventProcessor := NewEventProcessor(db, client)
-	positionProcessor := NewPositionProcessor(db)
 	positionChan := make(chan PositionEvent, 1000) // Buffer size of 1000 events
+	positionProcessor := NewPositionProcessor(db)
 
 	return &Indexer{
 		config:            cfg,

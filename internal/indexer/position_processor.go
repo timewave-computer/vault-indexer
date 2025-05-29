@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -24,6 +25,7 @@ type PositionProcessor struct {
 	db     *supa.Client
 	ctx    context.Context
 	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 // NewPositionProcessor creates a new position processor
@@ -37,7 +39,9 @@ func NewPositionProcessor(db *supa.Client) *PositionProcessor {
 }
 
 func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) {
+	p.wg.Add(1)
 	go func() {
+		defer p.wg.Done()
 		for {
 			select {
 			case event := <-eventChan:
@@ -56,6 +60,7 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) {
 
 func (p *PositionProcessor) Stop() {
 	p.cancel()
+	p.wg.Wait()
 }
 
 func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
