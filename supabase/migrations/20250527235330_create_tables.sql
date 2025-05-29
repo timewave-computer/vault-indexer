@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS positions (
     neutron_address TEXT,
     position_start_height BIGINT NOT NULL,
     position_end_height BIGINT,
-    amount NUMERIC NOT NULL,
+    amount TEXT NOT NULL,
     is_terminated BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

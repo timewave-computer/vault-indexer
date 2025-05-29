@@ -22,14 +22,14 @@ type PositionEvent struct {
 
 // Position represents a position record in the database
 type Position struct {
-	ID                  int64       `json:"id"`
-	Amount              json.Number `json:"amount"`
-	PositionEndHeight   *int64      `json:"position_end_height"`
-	IsTerminated        bool        `json:"is_terminated"`
-	NeutronAddress      *string     `json:"neutron_address"`
-	PositionStartHeight int64       `json:"position_start_height"`
-	EthereumAddress     string      `json:"ethereum_address"`
-	ContractAddress     string      `json:"contract_address"`
+	ID                  int64   `json:"id"`
+	Amount              string  `json:"amount"`
+	PositionEndHeight   *int64  `json:"position_end_height"`
+	IsTerminated        bool    `json:"is_terminated"`
+	NeutronAddress      *string `json:"neutron_address"`
+	PositionStartHeight int64   `json:"position_start_height"`
+	EthereumAddress     string  `json:"ethereum_address"`
+	ContractAddress     string  `json:"contract_address"`
 }
 
 // PositionUpdate represents a position record to be upserted
@@ -68,7 +68,11 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 		defer p.wg.Done()
 		for {
 			select {
-			case event := <-eventChan:
+			case event, ok := <-eventChan:
+				if !ok {
+					// Channel is closed, exit gracefully
+					return
+				}
 				// Get current position if it exists
 				var currentPosition *Position
 				var ethereumAddress string
@@ -80,8 +84,8 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 						ethereumAddress = owner.Hex()
 					}
 				case "Transfer":
-					if from, ok := event.EventData["from"].(common.Address); ok {
-						ethereumAddress = from.Hex()
+					if to, ok := event.EventData["to"].(common.Address); ok {
+						ethereumAddress = to.Hex()
 					}
 				case "Withdraw":
 					if owner, ok := event.EventData["sender"].(common.Address); ok {
@@ -126,10 +130,9 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 							Update(map[string]interface{}{
 								"position_end_height": update.PositionEndHeight,
 								"is_terminated":       update.IsTerminated,
+								"neutron_address":     update.NeutronAddress,
 							}, "", "").
-							Eq("ethereum_address", update.EthereumAddress).
-							Eq("contract_address", update.ContractAddress).
-							Is("position_end_height", "null").
+							Eq("id", fmt.Sprintf("%d", *update.Id)).
 							Execute()
 						if err != nil {
 							log.Printf("Error updating position: %v", err)
@@ -220,7 +223,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 	if currentPosition != nil {
 		// Add the current amount to the new amount using big.Int
 		currentBigInt := new(big.Int)
-		currentBigInt.SetString(currentPosition.Amount.String(), 10)
+		currentBigInt.SetString(currentPosition.Amount, 10)
 		newBigInt := new(big.Int)
 		newBigInt.SetString(amount, 10)
 		newBigInt.Add(currentBigInt, newBigInt)
@@ -236,7 +239,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 			Id:                  &currentPosition.ID,
 			EthereumAddress:     ethereumAddress,
 			ContractAddress:     event.Log.Address.Hex(),
-			Amount:              currentPosition.Amount.String(),
+			Amount:              currentPosition.Amount,
 			PositionStartHeight: uint64(currentPosition.PositionStartHeight),
 			PositionEndHeight:   &endHeight,
 			IsTerminated:        newAmount == "0",

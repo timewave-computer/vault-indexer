@@ -101,7 +101,7 @@ func (e *EventProcessor) ProcessEvent(vLog types.Log, event abi.Event, contractN
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert event into database: %w", err)
 	}
-	log.Printf("Inserted event for tx: %s, block: %d, event: %s", vLog.TxHash.Hex(), vLog.BlockNumber, string(eventJSON))
+	log.Printf("Inserted event for event: %s, tx: %s, block: %d, data: %s", event.Name, vLog.TxHash.Hex(), vLog.BlockNumber, string(eventJSON))
 
 	return eventData, nil
 }

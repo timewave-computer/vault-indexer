@@ -92,7 +92,7 @@ func TestProcessDeposit(t *testing.T) {
 				EthereumAddress:     UserAddress1,
 				ContractAddress:     VaultAddress,
 				Amount:              "150",
-				PositionStartHeight: 200,
+				PositionStartHeight: 2000,
 				PositionEndHeight:   nil,
 				IsTerminated:        false,
 				NeutronAddress:      nil,
