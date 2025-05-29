@@ -192,6 +192,9 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 		// TODO: update 2 positions (from + to)
 
 	case "Withdraw":
+		if currentPosition == nil {
+			return []PositionUpdate{}, nil
+		}
 		if owner, ok := event.EventData["sender"].(common.Address); ok {
 			ethereumAddress = owner.Hex()
 		}

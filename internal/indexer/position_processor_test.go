@@ -52,6 +52,56 @@ func TestProcessDeposit(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, expectedUpdates, gotUpdates)
 	})
+
+	t.Run("deposit with negative amount", func(t *testing.T) {
+		processor := &PositionProcessor{}
+		var currentPosition = Position{
+			ID:                  1,
+			Amount:              "100",
+			PositionEndHeight:   nil,
+			IsTerminated:        false,
+			NeutronAddress:      nil,
+			PositionStartHeight: 1000,
+			EthereumAddress:     UserAddress1,
+			ContractAddress:     VaultAddress,
+		}
+		var event = PositionEvent{
+			EventName: "Deposit",
+			EventData: map[string]interface{}{
+				"sender": common.HexToAddress(UserAddress1),
+				"assets": big.NewInt(-50),
+			},
+			Log: types.Log{
+				Address:     common.HexToAddress(VaultAddress),
+				BlockNumber: 2000,
+			},
+		}
+		var expectedUpdates = []PositionUpdate{
+			{
+				Id:                  &currentPosition.ID,
+				EthereumAddress:     UserAddress1,
+				ContractAddress:     VaultAddress,
+				Amount:              "100",
+				PositionStartHeight: 1000,
+				PositionEndHeight:   toUint64Ptr(1999),
+				IsTerminated:        false,
+				NeutronAddress:      nil,
+			},
+			{
+				EthereumAddress:     UserAddress1,
+				ContractAddress:     VaultAddress,
+				Amount:              "50",
+				PositionStartHeight: 2000,
+				PositionEndHeight:   nil,
+				IsTerminated:        false,
+				NeutronAddress:      nil,
+			},
+		}
+		gotUpdates, err := processor.processPositionEvent(event, &currentPosition)
+		assert.NoError(t, err)
+		assert.Equal(t, expectedUpdates, gotUpdates)
+	})
+
 	t.Run("deposit, existing position ", func(t *testing.T) {
 		processor := &PositionProcessor{}
 		var currentPosition = Position{
@@ -105,8 +155,6 @@ func TestProcessDeposit(t *testing.T) {
 
 func TestProcessWithdraw(t *testing.T) {
 
-	// TODO: handle no existing position
-
 	t.Run("partial withdraw", func(t *testing.T) {
 		processor := &PositionProcessor{}
 		var currentPosition = Position{
@@ -153,6 +201,67 @@ func TestProcessWithdraw(t *testing.T) {
 			},
 		}
 		gotUpdates, err := processor.processPositionEvent(event, &currentPosition)
+		assert.NoError(t, err)
+		assert.Equal(t, expectedUpdates, gotUpdates)
+	})
+
+	t.Run("full withdraw", func(t *testing.T) {
+		processor := &PositionProcessor{}
+		var currentPosition = Position{
+			ID:                  1,
+			Amount:              "100",
+			PositionEndHeight:   nil,
+			IsTerminated:        false,
+			NeutronAddress:      nil,
+			PositionStartHeight: 1000,
+			EthereumAddress:     UserAddress1,
+			ContractAddress:     VaultAddress,
+		}
+		var event = PositionEvent{
+			EventName: "Withdraw",
+			EventData: map[string]interface{}{
+				"sender":   common.HexToAddress(UserAddress1),
+				"assets":   big.NewInt(100),
+				"receiver": NeutronAddress1,
+			},
+			Log: types.Log{
+				Address:     common.HexToAddress(VaultAddress),
+				BlockNumber: 2000,
+			},
+		}
+		var expectedUpdates = []PositionUpdate{
+			{
+				Id:                  &currentPosition.ID,
+				EthereumAddress:     UserAddress1,
+				ContractAddress:     VaultAddress,
+				Amount:              "100",
+				PositionStartHeight: 1000,
+				PositionEndHeight:   toUint64Ptr(1999),
+				IsTerminated:        true,
+				NeutronAddress:      toStringPtr(NeutronAddress1),
+			},
+		}
+		gotUpdates, err := processor.processPositionEvent(event, &currentPosition)
+		assert.NoError(t, err)
+		assert.Equal(t, expectedUpdates, gotUpdates)
+	})
+
+	t.Run("no existing position", func(t *testing.T) {
+		processor := &PositionProcessor{}
+		var event = PositionEvent{
+			EventName: "Withdraw",
+			EventData: map[string]interface{}{
+				"sender":   common.HexToAddress(UserAddress1),
+				"assets":   big.NewInt(100),
+				"receiver": NeutronAddress1,
+			},
+			Log: types.Log{
+				Address:     common.HexToAddress(VaultAddress),
+				BlockNumber: 2000,
+			},
+		}
+		var expectedUpdates = []PositionUpdate{}
+		gotUpdates, err := processor.processPositionEvent(event, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, expectedUpdates, gotUpdates)
 	})
