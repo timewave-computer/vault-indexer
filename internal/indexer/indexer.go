@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -28,6 +29,7 @@ type Indexer struct {
 	positionChan      chan PositionEvent
 	positionProcessor *PositionProcessor
 	eventProcessor    *EventProcessor
+	wg                sync.WaitGroup
 }
 
 func New(cfg *config.Config) (*Indexer, error) {
@@ -47,8 +49,8 @@ func New(cfg *config.Config) (*Indexer, error) {
 	}
 
 	// Create processors
-	positionProcessor := NewPositionProcessor(db)
 	eventProcessor := NewEventProcessor(db, client)
+	positionProcessor := NewPositionProcessor(db)
 	positionChan := make(chan PositionEvent, 1000) // Buffer size of 1000 events
 
 	return &Indexer{
@@ -83,7 +85,11 @@ func (i *Indexer) Start() error {
 		}
 	}
 
-	// Set up subscriptions for new events
+	// TODO: there is a window here where there might be new events that are missed while processing historical events.
+	// add a check to see if there are any new events since the last time we processed historical events.
+	// OR set up subscriptions immediately so the queue can fill, but only process them after historical events are processed.
+
+	// AFTER all historical events have been processed, set up subscriptions for new events
 	for _, contract := range i.config.Contracts {
 		if err := i.setupEventSubscriptions(contract); err != nil {
 			return fmt.Errorf("failed to set up event subscriptions for contract %s: %w", contract.Name, err)
@@ -179,7 +185,9 @@ func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error 
 			return fmt.Errorf("failed to subscribe to logs: %w", err)
 		}
 
+		i.wg.Add(1)
 		go func() {
+			defer i.wg.Done() // decrements waitgroup after goroutine finishes
 			for {
 				select {
 				case err := <-sub.Err():
@@ -224,10 +232,21 @@ func (i *Indexer) processEvent(vLog types.Log, event abi.Event, contractName str
 
 func (i *Indexer) Stop() error {
 	log.Println("Stopping indexer...")
+
+	// signal writers to stop
 	i.cancel()
-	i.client.Close()
+
+	// close channel so the reader goroutine can exit gracefully
+	close(i.positionChan)
+
+	// wait until all goroutines finish
+	i.wg.Wait()
+
+	// stop processors
 	i.positionProcessor.Stop()
 	i.eventProcessor.Stop()
-	close(i.positionChan)
+
+	// finally release external resources
+	i.client.Close()
 	return nil
 }

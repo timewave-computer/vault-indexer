@@ -1,5 +1,13 @@
 # Indexer
 
+## Architecture
+- Main indexer process starts, loads config for what to index and what to connect to, connects to the eth client and database, starts up channels for data transformation after ingestion
+- Begins event processing
+   1. for each contract and event in the config, process historical events. for each event, save in DB and send to post processing (positions)
+   2. for each contract and event in the config, subscribe to event. as they come in, send to processing
+- Passes data to post-process after event ingestion
+    1. from positions channel: read and process positions
+
 
 ## Requirements
 1. connecting to an evm node in go

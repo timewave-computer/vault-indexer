@@ -41,6 +41,8 @@ func (e *EventProcessor) ProcessEvent(vLog types.Log, event abi.Event, contractN
 	// Parse the event data
 	eventData := make(map[string]interface{})
 
+	// TODO: potentianl issue if non-indexed parameters come before indexed parameters. It will shift the offset.
+
 	// Handle indexed parameters (topics)
 	for i, input := range event.Inputs {
 		if input.Indexed {
@@ -91,7 +93,7 @@ func (e *EventProcessor) ProcessEvent(vLog types.Log, event abi.Event, contractN
 		"block_number":     vLog.BlockNumber,
 		"transaction_hash": vLog.TxHash.Hex(),
 		"log_index":        vLog.Index,
-		"raw_data":         string(eventJSON),
+		"raw_data":         eventJSON,
 	}
 	log.Printf("Event record: %v", eventRecord)
 
