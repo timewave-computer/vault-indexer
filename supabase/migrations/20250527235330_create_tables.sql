@@ -21,8 +21,6 @@ CREATE TABLE IF NOT EXISTS positions (
     position_end_height BIGINT,
     amount NUMERIC NOT NULL,
     is_terminated BOOLEAN NOT NULL DEFAULT FALSE,
-    entry_method TEXT NOT NULL CHECK (entry_method IN ('deposit', 'transfer')),
-    exit_method TEXT CHECK (exit_method IN ('withdraw', 'deposit', 'transfer')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

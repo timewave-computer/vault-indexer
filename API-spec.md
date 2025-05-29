@@ -39,8 +39,11 @@
 	
 	// 'nice to haves' for quality of life
 	isTerminated: bool  // position for ethereum address becomes 0
-	entry_method: 'deposit' | 'transfer'
-	exit_method: 'withdraw' | 'deposit' | 'transfer' | null
+
+	// TODO:
+	isDeposit: bool
+	isTransfer:bool
+
 }
 ```
 
@@ -79,8 +82,7 @@ evm_address: string (optional) // option to filter positions by a user address
 		    "position_end_height": 18000100,
 		    "amount": 1000,
 		    "isTerminated": false,
-		    "entry_method": 'deposit',
-		    "exit_method": 'deposit' 
+	
 		  },
 		  {
 			 // user1 deposited another 1000, no withdraw or transfer
@@ -91,8 +93,7 @@ evm_address: string (optional) // option to filter positions by a user address
 		    "position_end_height": null,
 		    "amount": 2000,
 		    "isTerminated": false,
-		    "entry_method": deposit
-		    "exit_method": null
+
 		    
 		  },
 		  // user2 deposited 1000 and withdrew
@@ -104,8 +105,7 @@ evm_address: string (optional) // option to filter positions by a user address
 		    "position_end_height": 18030000,
 		    "amount": 1000,
 		    "isTerminated": true,
-		    "entry_method": "deposit",
-		    "exit_method": "withdraw"
+
 		  }
 	]
 }

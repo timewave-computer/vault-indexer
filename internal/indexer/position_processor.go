@@ -25,8 +25,6 @@ type Position struct {
 	ID                  int64       `json:"id"`
 	Amount              json.Number `json:"amount"`
 	PositionEndHeight   *int64      `json:"position_end_height"`
-	EntryMethod         string      `json:"entry_method"`
-	ExitMethod          *string     `json:"exit_method"`
 	IsTerminated        bool        `json:"is_terminated"`
 	NeutronAddress      *string     `json:"neutron_address"`
 	PositionStartHeight int64       `json:"position_start_height"`
@@ -42,8 +40,6 @@ type PositionUpdate struct {
 	Amount              string
 	PositionStartHeight uint64
 	PositionEndHeight   *uint64
-	EntryMethod         string
-	ExitMethod          *string
 	IsTerminated        bool
 	NeutronAddress      *string
 }
@@ -129,7 +125,6 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 						_, _, err = p.db.From("positions").
 							Update(map[string]interface{}{
 								"position_end_height": update.PositionEndHeight,
-								"exit_method":         update.ExitMethod,
 								"is_terminated":       update.IsTerminated,
 							}, "", "").
 							Eq("ethereum_address", update.EthereumAddress).
@@ -150,8 +145,6 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 							"amount":                update.Amount,
 							"position_start_height": update.PositionStartHeight,
 							"position_end_height":   update.PositionEndHeight,
-							"entry_method":          update.EntryMethod,
-							"exit_method":           update.ExitMethod,
 							"is_terminated":         update.IsTerminated,
 							"neutron_address":       update.NeutronAddress,
 						}, false, "", "", "").Execute()
@@ -178,8 +171,6 @@ func (p *PositionProcessor) Stop() {
 func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPosition *Position) ([]PositionUpdate, error) {
 	var ethereumAddress string
 	var amount string
-	var entryMethod string
-	var exitMethod string
 
 	// Handle different event types
 	switch event.EventName {
@@ -191,9 +182,6 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 			amount = assets.String()
 		}
 
-		entryMethod = "deposit"
-		exitMethod = "deposit"
-
 	case "Transfer":
 		if to, ok := event.EventData["from"].(common.Address); ok {
 			ethereumAddress = to.Hex()
@@ -201,8 +189,6 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 		if value, ok := event.EventData["value"].(*big.Int); ok {
 			amount = value.String()
 		}
-		entryMethod = "transfer"
-		exitMethod = "transfer"
 
 		// TODO: update 2 positions (from + to)
 
@@ -215,7 +201,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 			negAssets := new(big.Int).Neg(assets)
 			amount = negAssets.String()
 		}
-		exitMethod = "withdraw"
+
 	default:
 		return nil, nil
 	}
@@ -248,10 +234,9 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 			Amount:              currentPosition.Amount.String(),
 			PositionStartHeight: uint64(currentPosition.PositionStartHeight),
 			PositionEndHeight:   &endHeight,
-			EntryMethod:         currentPosition.EntryMethod,
-			ExitMethod:          &exitMethod,
-			IsTerminated:        newAmount == "0",
-			NeutronAddress:      nil,
+
+			IsTerminated:   newAmount == "0",
+			NeutronAddress: nil,
 		})
 	}
 
@@ -263,10 +248,9 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 			Amount:              newAmount,
 			PositionStartHeight: event.Log.BlockNumber,
 			PositionEndHeight:   nil,
-			EntryMethod:         entryMethod,
-			ExitMethod:          nil,
-			IsTerminated:        false,
-			NeutronAddress:      nil,
+
+			IsTerminated:   false,
+			NeutronAddress: nil,
 		})
 	}
 
