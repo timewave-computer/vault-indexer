@@ -146,6 +146,25 @@
     },
     {
         "type": "function",
+        "name": "calculateWithdrawalFee",
+        "inputs": [
+            {
+                "name": "assets",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "config",
         "inputs": [],
         "outputs": [
@@ -161,6 +180,11 @@
             },
             {
                 "name": "depositFeeBps",
+                "type": "uint32",
+                "internalType": "uint32"
+            },
+            {
+                "name": "withdrawRateBps",
                 "type": "uint32",
                 "internalType": "uint32"
             },
@@ -284,7 +308,7 @@
     },
     {
         "type": "function",
-        "name": "feesOwedInAsset",
+        "name": "feesAccruedInAsset",
         "inputs": [],
         "outputs": [
             {
@@ -945,6 +969,11 @@
                     },
                     {
                         "name": "depositFeeBps",
+                        "type": "uint32",
+                        "internalType": "uint32"
+                    },
+                    {
+                        "name": "withdrawRateBps",
                         "type": "uint32",
                         "internalType": "uint32"
                     },
