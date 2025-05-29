@@ -28,7 +28,7 @@ type ContractConfig struct {
 
 type DatabaseConfig struct {
 	SupabaseURL string `mapstructure:"supabase_url"`
-	SupabaseKey string `mapstructure:"supabase_anon_key"`
+	SupabaseKey string `mapstructure:"supabase_admin_key"`
 }
 
 func Load() (*Config, error) {

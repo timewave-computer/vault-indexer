@@ -198,7 +198,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 		if currentPosition == nil {
 			return []PositionUpdate{}, nil
 		}
-		if owner, ok := event.EventData["sender"].(common.Address); ok {
+		if owner, ok := event.EventData["owner"].(common.Address); ok {
 			ethereumAddress = owner.Hex()
 		}
 		if receiver, ok := event.EventData["receiver"].(string); ok {

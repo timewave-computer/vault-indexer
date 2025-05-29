@@ -30,3 +30,18 @@ CREATE TABLE IF NOT EXISTS positions (
 CREATE INDEX IF NOT EXISTS idx_positions_contract_address ON positions(contract_address);
 CREATE INDEX IF NOT EXISTS idx_positions_ethereum_address ON positions(ethereum_address);
 CREATE INDEX IF NOT EXISTS idx_events_contract_address ON events(contract_address);
+
+-- Enable Row Level Security
+ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE positions ENABLE ROW LEVEL SECURITY;
+
+-- Create policies for anonymous read access
+CREATE POLICY "Allow anonymous read access on events" 
+    ON events FOR SELECT 
+    TO anon 
+    USING (true);
+
+CREATE POLICY "Allow anonymous read access on positions" 
+    ON positions FOR SELECT 
+    TO anon 
+    USING (true);
