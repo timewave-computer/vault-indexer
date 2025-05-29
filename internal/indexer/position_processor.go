@@ -120,7 +120,7 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 
 				// Apply updates to database
 				for _, update := range updates {
-					if update.PositionEndHeight != nil {
+					if update.Id != nil {
 						// Update existing position
 						_, _, err = p.db.From("positions").
 							Update(map[string]interface{}{
@@ -135,9 +135,7 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 							log.Printf("Error updating position: %v", err)
 							continue
 						}
-					}
-
-					if update.Amount != "0" {
+					} else {
 						// Insert new position
 						_, _, err = p.db.From("positions").Insert(map[string]interface{}{
 							"ethereum_address":      update.EthereumAddress,
