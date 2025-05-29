@@ -69,7 +69,9 @@ func (i *Indexer) Start() error {
 	log.Println("Starting indexer...")
 
 	// Start position processor
-	i.positionProcessor.Start(i.positionChan)
+	if err := i.positionProcessor.Start(i.positionChan); err != nil {
+		return fmt.Errorf("failed to start position processor: %w", err)
+	}
 
 	// Perform health check by getting current block height
 	blockNumber, err := i.client.BlockNumber(i.ctx)

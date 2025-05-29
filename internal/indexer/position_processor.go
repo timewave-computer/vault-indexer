@@ -38,7 +38,7 @@ func NewPositionProcessor(db *supa.Client) *PositionProcessor {
 	}
 }
 
-func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) {
+func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
@@ -56,6 +56,7 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) {
 			}
 		}
 	}()
+	return nil
 }
 
 func (p *PositionProcessor) Stop() {
@@ -64,8 +65,8 @@ func (p *PositionProcessor) Stop() {
 }
 
 func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
-	var accountAddress string
-	var amount float64
+	var ethereumAddress string
+	var amount string
 	var entryMethod string
 	var exitMethod string
 
@@ -73,49 +74,51 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
 	switch event.EventName {
 	case "Deposit":
 		if owner, ok := event.EventData["sender"].(common.Address); ok {
-			accountAddress = owner.Hex()
+			ethereumAddress = owner.Hex()
 		}
 		if assets, ok := event.EventData["assets"].(*big.Int); ok {
-			amount = float64(assets.Int64())
+			amount = assets.String()
 		}
 		entryMethod = "deposit"
 		exitMethod = "deposit"
 
 	case "Transfer":
 		if to, ok := event.EventData["from"].(common.Address); ok {
-			accountAddress = to.Hex()
+			ethereumAddress = to.Hex()
 		}
 		if value, ok := event.EventData["value"].(*big.Int); ok {
-			amount = float64(value.Int64())
+			amount = value.String()
 		}
 		entryMethod = "transfer"
 		exitMethod = "transfer"
 
 	case "Withdraw":
 		if owner, ok := event.EventData["sender"].(common.Address); ok {
-			accountAddress = owner.Hex()
+			ethereumAddress = owner.Hex()
 		}
 		if assets, ok := event.EventData["assets"].(*big.Int); ok {
-			amount = -float64(assets.Int64())
+			// For withdrawals, we'll store the negative value as a string
+			negAssets := new(big.Int).Neg(assets)
+			amount = negAssets.String()
 		}
 		exitMethod = "withdraw"
 	default:
 		return nil
 	}
 
-	if accountAddress == "" {
+	if ethereumAddress == "" {
 		return fmt.Errorf("could not determine account address from event data")
 	}
 
 	// Get current position if it exists
 	var currentPosition struct {
-		PositionIndexNumber int64   `json:"position_index_number"`
-		Amount              float64 `json:"amount"`
-		PositionEndHeight   *int64  `json:"position_end_height"`
+		PositionIndexNumber int64  `json:"position_index_number"`
+		Amount              string `json:"amount"`
+		PositionEndHeight   *int64 `json:"position_end_height"`
 	}
 	_, _, err := p.db.From("positions").
 		Select("position_index_number,amount,position_end_height", "", false).
-		Eq("account_address", accountAddress).
+		Eq("ethereum_address", ethereumAddress).
 		Eq("contract_address", event.Log.Address.Hex()).
 		Is("position_end_height", "null").
 		Single().
@@ -124,7 +127,13 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
 	// Calculate new amount
 	newAmount := amount
 	if err == nil {
-		newAmount += currentPosition.Amount
+		// Add the current amount to the new amount using big.Int
+		currentBigInt := new(big.Int)
+		currentBigInt.SetString(currentPosition.Amount, 10)
+		newBigInt := new(big.Int)
+		newBigInt.SetString(amount, 10)
+		newBigInt.Add(currentBigInt, newBigInt)
+		newAmount = newBigInt.String()
 	}
 
 	// Close current position if it exists
@@ -134,7 +143,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
 			Update(map[string]interface{}{
 				"position_end_height": endHeight,
 				"exit_method":         exitMethod,
-				"is_terminated":       newAmount == 0,
+				"is_terminated":       newAmount == "0",
 			}, "", "").
 			Eq("position_index_number", fmt.Sprintf("%d", currentPosition.PositionIndexNumber)).
 			Execute()
@@ -144,7 +153,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
 	}
 
 	// Create new position if amount is not zero
-	if newAmount != 0 {
+	if newAmount != "0" {
 		// Get the highest position index
 		var maxPosition struct {
 			PositionIndexNumber int64 `json:"position_index_number"`
@@ -181,7 +190,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
 
 		positionRecord := map[string]interface{}{
 			"position_index_number": positionIndex,
-			"ethereum_address":      accountAddress,
+			"ethereum_address":      ethereumAddress,
 			"contract_address":      event.Log.Address.Hex(),
 			"amount":                newAmount,
 			"position_start_height": event.Log.BlockNumber,
@@ -197,7 +206,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
 			return fmt.Errorf("failed to create new position: %w", err)
 		}
 
-		log.Printf("Created new position for account %s: amount = %f, index = %d", accountAddress, newAmount, positionIndex)
+		log.Printf("Created new position for account %s: amount = %s, index = %d", ethereumAddress, newAmount, positionIndex)
 	}
 
 	return nil
