@@ -23,7 +23,7 @@ type PositionEvent struct {
 // Position represents a position record in the database
 type Position struct {
 	ID                  int64   `json:"id"`
-	Amount              string  `json:"amount"`
+	AmountShares        string  `json:"amount_shares"`
 	PositionEndHeight   *int64  `json:"position_end_height"`
 	IsTerminated        bool    `json:"is_terminated"`
 	NeutronAddress      *string `json:"neutron_address"`
@@ -37,7 +37,7 @@ type PositionUpdate struct {
 	Id                  *int64
 	EthereumAddress     string
 	ContractAddress     string
-	Amount              string
+	AmountShares        string
 	PositionStartHeight uint64
 	PositionEndHeight   *uint64
 	IsTerminated        bool
@@ -101,7 +101,7 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 				}
 
 				data, _, err := p.db.From("positions").
-					Select("id,amount,position_end_height", "", false).
+					Select("id,amount_shares,position_end_height", "", false).
 					Eq("ethereum_address", ethereumAddress).
 					Eq("contract_address", event.Log.Address.Hex()).
 					Is("position_end_height", "null").
@@ -146,7 +146,7 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 						_, _, err = p.db.From("positions").Insert(map[string]interface{}{
 							"ethereum_address":      update.EthereumAddress,
 							"contract_address":      update.ContractAddress,
-							"amount":                update.Amount,
+							"amount_shares":         update.AmountShares,
 							"position_start_height": update.PositionStartHeight,
 							"position_end_height":   update.PositionEndHeight,
 							"is_terminated":         update.IsTerminated,
@@ -176,7 +176,7 @@ func (p *PositionProcessor) Stop() {
 
 func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPosition *Position) ([]PositionUpdate, error) {
 	var ethereumAddress string
-	var amount string
+	var amount_shares string
 	var neutronAddress *string
 	var isDeposit = false
 	var isWithdraw = false
@@ -190,7 +190,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 			ethereumAddress = owner.Hex()
 		}
 		if assets, ok := event.EventData["assets"].(*big.Int); ok {
-			amount = assets.String()
+			amount_shares = assets.String()
 		}
 		isDeposit = true
 
@@ -207,7 +207,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 		if assets, ok := event.EventData["assets"].(*big.Int); ok {
 			// For withdrawals, we'll store the negative value as a string
 			negAssets := new(big.Int).Neg(assets)
-			amount = negAssets.String()
+			amount_shares = negAssets.String()
 		}
 		isWithdraw = true
 
@@ -216,7 +216,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 			ethereumAddress = to.Hex()
 		}
 		if value, ok := event.EventData["value"].(*big.Int); ok {
-			amount = value.String()
+			amount_shares = value.String()
 		}
 
 		// Skip if from or to address is zero address
@@ -237,14 +237,14 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 		return nil, fmt.Errorf("could not determine account address from event data")
 	}
 
-	// Calculate new amount
-	newAmount := amount
+	// Calculate new amount_shares
+	newAmount := amount_shares
 	if currentPosition != nil {
-		// Add the current amount to the new amount using big.Int
+		// Add the current amount_shares to the new amount_shares using big.Int
 		currentBigInt := new(big.Int)
-		currentBigInt.SetString(currentPosition.Amount, 10)
+		currentBigInt.SetString(currentPosition.AmountShares, 10)
 		newBigInt := new(big.Int)
-		newBigInt.SetString(amount, 10)
+		newBigInt.SetString(amount_shares, 10)
 		newBigInt.Add(currentBigInt, newBigInt)
 		newAmount = newBigInt.String()
 	}
@@ -258,7 +258,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 			Id:                  &currentPosition.ID,
 			EthereumAddress:     ethereumAddress,
 			ContractAddress:     event.Log.Address.Hex(),
-			Amount:              currentPosition.Amount,
+			AmountShares:        currentPosition.AmountShares,
 			PositionStartHeight: uint64(currentPosition.PositionStartHeight),
 			PositionEndHeight:   &endHeight,
 			IsTerminated:        newAmount == "0",
@@ -268,12 +268,12 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 		})
 	}
 
-	// Create new position if amount is not zero
+	// Create new position if amount_shares is not zero
 	if newAmount != "0" {
 		var newPosition = PositionUpdate{
 			EthereumAddress:     ethereumAddress,
 			ContractAddress:     event.Log.Address.Hex(),
-			Amount:              newAmount,
+			AmountShares:        newAmount,
 			PositionStartHeight: event.Log.BlockNumber,
 			PositionEndHeight:   nil,
 			IsTerminated:        false,

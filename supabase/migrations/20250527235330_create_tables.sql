@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS positions (
     neutron_address TEXT,
     position_start_height BIGINT NOT NULL,
     position_end_height BIGINT,
-    amount TEXT NOT NULL,
+    amount_shares TEXT NOT NULL,
     is_terminated BOOLEAN NOT NULL DEFAULT FALSE,
     is_deposit BOOLEAN NOT NULL DEFAULT FALSE,
     is_withdraw BOOLEAN NOT NULL DEFAULT FALSE,

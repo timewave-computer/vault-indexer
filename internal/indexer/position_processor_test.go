@@ -41,7 +41,7 @@ func TestProcessDeposit(t *testing.T) {
 			{
 				EthereumAddress:     UserAddress1,
 				ContractAddress:     VaultAddress,
-				Amount:              "50",
+				AmountShares:        "50",
 				PositionStartHeight: 1000,
 				PositionEndHeight:   nil,
 				IsTerminated:        false,
@@ -57,7 +57,7 @@ func TestProcessDeposit(t *testing.T) {
 		processor := &PositionProcessor{}
 		var currentPosition = Position{
 			ID:                1,
-			Amount:            "100",
+			AmountShares:      "100",
 			PositionEndHeight: nil,
 
 			IsTerminated:        false,
@@ -82,7 +82,7 @@ func TestProcessDeposit(t *testing.T) {
 				Id:                  &currentPosition.ID,
 				EthereumAddress:     UserAddress1,
 				ContractAddress:     VaultAddress,
-				Amount:              "100",
+				AmountShares:        "100",
 				PositionStartHeight: 1000,
 				PositionEndHeight:   toUint64Ptr(1999),
 				IsTerminated:        false,
@@ -91,7 +91,7 @@ func TestProcessDeposit(t *testing.T) {
 			{
 				EthereumAddress:     UserAddress1,
 				ContractAddress:     VaultAddress,
-				Amount:              "150",
+				AmountShares:        "150",
 				PositionStartHeight: 2000,
 				PositionEndHeight:   nil,
 				IsTerminated:        false,
@@ -110,7 +110,7 @@ func TestProcessWithdraw(t *testing.T) {
 		processor := &PositionProcessor{}
 		var currentPosition = Position{
 			ID:                  1,
-			Amount:              "100",
+			AmountShares:        "100",
 			PositionEndHeight:   nil,
 			IsTerminated:        false,
 			NeutronAddress:      nil,
@@ -135,7 +135,7 @@ func TestProcessWithdraw(t *testing.T) {
 				Id:                  &currentPosition.ID,
 				EthereumAddress:     UserAddress1,
 				ContractAddress:     VaultAddress,
-				Amount:              "100",
+				AmountShares:        "100",
 				PositionStartHeight: 1000,
 				PositionEndHeight:   toUint64Ptr(1999),
 				IsTerminated:        false,
@@ -144,7 +144,7 @@ func TestProcessWithdraw(t *testing.T) {
 			{
 				EthereumAddress:     UserAddress1,
 				ContractAddress:     VaultAddress,
-				Amount:              "50",
+				AmountShares:        "50",
 				PositionStartHeight: 2000,
 				PositionEndHeight:   nil,
 				IsTerminated:        false,
@@ -160,7 +160,7 @@ func TestProcessWithdraw(t *testing.T) {
 		processor := &PositionProcessor{}
 		var currentPosition = Position{
 			ID:                  1,
-			Amount:              "100",
+			AmountShares:        "100",
 			PositionEndHeight:   nil,
 			IsTerminated:        false,
 			NeutronAddress:      nil,
@@ -185,7 +185,7 @@ func TestProcessWithdraw(t *testing.T) {
 				Id:                  &currentPosition.ID,
 				EthereumAddress:     UserAddress1,
 				ContractAddress:     VaultAddress,
-				Amount:              "100",
+				AmountShares:        "100",
 				PositionStartHeight: 1000,
 				PositionEndHeight:   toUint64Ptr(1999),
 				IsTerminated:        true,

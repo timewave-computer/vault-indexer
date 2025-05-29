@@ -35,7 +35,7 @@
 	neutron_address: string | null // neutron address recorded for withdraw
 	position_start_height: number // block number position was created
 	position_end_height: number | null // block number position was modified -1
-	amount: number // amount of asset store
+	amount_shares: number // amount_shares of asset store
 	
 	// 'nice to haves' for quality of life
 	isTerminated: bool  // position for ethereum address becomes 0
@@ -47,7 +47,7 @@
 }
 ```
 
-`Position` start block and amount will be immutable. Any time a position change is captured for an EVM address (deposit, withdraw, transfer), the latest position will be ‘closed’ at `block_height -1,` and a new `Position` will be opened at `block_height`. 
+`Position` start block and amount_shares will be immutable. Any time a position change is captured for an EVM address (deposit, withdraw, transfer), the latest position will be ‘closed’ at `block_height -1,` and a new `Position` will be opened at `block_height`. 
 
 ### Input
 
@@ -80,7 +80,7 @@ evm_address: string (optional) // option to filter positions by a user address
 		    "neutron_address": null,
 		    "position_start_height": 18000000,
 		    "position_end_height": 18000100,
-		    "amount": 1000,
+		    "amount_shares": 1000,
 		    "isTerminated": false,
 	
 		  },
@@ -91,7 +91,7 @@ evm_address: string (optional) // option to filter positions by a user address
 		    "neutron_address": null,
 		    "position_start_height": 18000101,
 		    "position_end_height": null,
-		    "amount": 2000,
+		    "amount_shares": 2000,
 		    "isTerminated": false,
 
 		    
@@ -103,7 +103,7 @@ evm_address: string (optional) // option to filter positions by a user address
 		    "neutron_address": "neutron1abc...",
 		    "position_start_height": 18010000,
 		    "position_end_height": 18030000,
-		    "amount": 1000,
+		    "amount_shares": 1000,
 		    "isTerminated": true,
 
 		  }
