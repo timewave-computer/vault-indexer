@@ -177,7 +177,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent) error {
 			return fmt.Errorf("failed to create new position: %w", err)
 		}
 
-		log.Printf("Created new position for account %s: amount = %s, index = %d", positionRecord["ethereum_address"], positionRecord["amount"])
+		log.Printf("Created new position for account %s: amount = %s", positionRecord["ethereum_address"], positionRecord["amount"])
 	}
 
 	return nil
