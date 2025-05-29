@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	supa "github.com/supabase-community/supabase-go"
+	"github.com/timewave/vault-indexer/internal/database"
 )
 
 // PositionEvent represents an event that needs to be processed for position updates
@@ -18,32 +19,6 @@ type PositionEvent struct {
 	EventName string
 	EventData map[string]interface{}
 	Log       types.Log
-}
-
-// Position represents a position record in the database
-type Position struct {
-	ID                  int64   `json:"id"`
-	AmountShares        string  `json:"amount_shares"`
-	PositionEndHeight   *int64  `json:"position_end_height"`
-	IsTerminated        bool    `json:"is_terminated"`
-	NeutronAddress      *string `json:"neutron_address"`
-	PositionStartHeight int64   `json:"position_start_height"`
-	EthereumAddress     string  `json:"ethereum_address"`
-	ContractAddress     string  `json:"contract_address"`
-}
-
-// PositionUpdate represents a position record to be upserted
-type PositionUpdate struct {
-	Id                  *int64
-	EthereumAddress     string
-	ContractAddress     string
-	AmountShares        string
-	PositionStartHeight uint64
-	PositionEndHeight   *uint64
-	IsTerminated        bool
-	IsDeposit           bool
-	IsWithdraw          bool
-	NeutronAddress      *string
 }
 
 // PositionProcessor handles position updates from events
@@ -76,7 +51,7 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 					return
 				}
 				// Get current position if it exists
-				var currentPosition *Position
+				var currentPosition *database.PublicPositionsSelect
 				var ethereumAddress string
 
 				// Determine the ethereum address based on event type
@@ -101,15 +76,14 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 				}
 
 				data, _, err := p.db.From("positions").
-					Select("id,amount_shares,position_end_height", "", false).
+					Select("*", "", false).
 					Eq("ethereum_address", ethereumAddress).
 					Eq("contract_address", event.Log.Address.Hex()).
-					Is("position_end_height", "null").
 					Single().
 					Execute()
 
 				if err == nil {
-					var pos Position
+					var pos database.PublicPositionsSelect
 					if err := json.Unmarshal(data, &pos); err != nil {
 						log.Printf("Error unmarshaling current position: %v", err)
 						continue
@@ -118,46 +92,24 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 				}
 
 				// Process the event
-				updates, err := p.processPositionEvent(event, currentPosition)
+				inserts, updates, err := p.processPositionEvent(event, currentPosition)
 				if err != nil {
 					log.Printf("Error processing position event: %v", err)
 					continue
 				}
 
-				// Apply updates to database
+				for _, insert := range inserts {
+					_, _, err = p.db.From("positions").Insert(insert, false, "", "", "").Execute()
+					if err != nil {
+						log.Printf("Error inserting new position: %v", err)
+						continue
+					}
+				}
 				for _, update := range updates {
-					if update.Id != nil {
-						// Update existing position
-						_, _, err = p.db.From("positions").
-							Update(map[string]interface{}{
-								"position_end_height": update.PositionEndHeight,
-								"is_terminated":       update.IsTerminated,
-								"neutron_address":     update.NeutronAddress,
-								"is_withdraw":         update.IsWithdraw,
-							}, "", "").
-							Eq("id", fmt.Sprintf("%d", *update.Id)).
-							Execute()
-						if err != nil {
-							log.Printf("Error updating position: %v", err)
-							continue
-						}
-					} else {
-						// Insert new position
-						_, _, err = p.db.From("positions").Insert(map[string]interface{}{
-							"ethereum_address":      update.EthereumAddress,
-							"contract_address":      update.ContractAddress,
-							"amount_shares":         update.AmountShares,
-							"position_start_height": update.PositionStartHeight,
-							"position_end_height":   update.PositionEndHeight,
-							"is_terminated":         update.IsTerminated,
-							"neutron_address":       update.NeutronAddress,
-							"is_deposit":            update.IsDeposit,
-							"is_withdraw":           update.IsWithdraw,
-						}, false, "", "", "").Execute()
-						if err != nil {
-							log.Printf("Error inserting new position: %v", err)
-							continue
-						}
+					_, _, err = p.db.From("positions").Update(update, "", "").Execute()
+					if err != nil {
+						log.Printf("Error updating position: %v", err)
+						continue
 					}
 				}
 
@@ -174,14 +126,12 @@ func (p *PositionProcessor) Stop() {
 	p.wg.Wait()
 }
 
-func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPosition *Position) ([]PositionUpdate, error) {
+func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPosition *database.PublicPositionsSelect) ([]database.PublicPositionsInsert, []database.PublicPositionsUpdate, error) {
 	var ethereumAddress string
 	var amount_shares string
 	var neutronAddress *string
-	var isDeposit = false
-	var isWithdraw = false
-
-	log.Printf("Processing position event: %v, currentPosition: %v", event, currentPosition)
+	// var isDeposit = false
+	// var isWithdraw = false
 
 	// Handle different event types
 	switch event.EventName {
@@ -192,11 +142,10 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 		if assets, ok := event.EventData["assets"].(*big.Int); ok {
 			amount_shares = assets.String()
 		}
-		isDeposit = true
 
 	case "WithdrawRequested":
 		if currentPosition == nil {
-			return []PositionUpdate{}, nil
+			return nil, nil, nil
 		}
 		if owner, ok := event.EventData["owner"].(common.Address); ok {
 			ethereumAddress = owner.Hex()
@@ -209,7 +158,6 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 			negAssets := new(big.Int).Neg(assets)
 			amount_shares = negAssets.String()
 		}
-		isWithdraw = true
 
 	case "Transfer":
 		if to, ok := event.EventData["from"].(common.Address); ok {
@@ -224,17 +172,17 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 		to, toOk := event.EventData["to"].(common.Address)
 		if (fromOk && from == common.HexToAddress("0x0000000000000000000000000000000000000000")) ||
 			(toOk && to == common.HexToAddress("0x0000000000000000000000000000000000000000")) {
-			return nil, nil
+			return nil, nil, nil
 		}
 
 		// TODO: update 2 positions (from + to)
 
 	default:
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	if ethereumAddress == "" {
-		return nil, fmt.Errorf("could not determine account address from event data")
+		return nil, nil, fmt.Errorf("could not determine account address from event data")
 	}
 
 	// Calculate new amount_shares
@@ -249,43 +197,42 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 		newAmount = newBigInt.String()
 	}
 
-	var updates []PositionUpdate
+	var updates []database.PublicPositionsUpdate
+	var inserts []database.PublicPositionsInsert
+
+	endHeight := int64(event.Log.BlockNumber - 1)
+	isTerminated := newAmount == "0"
+	contractAddr := event.Log.Address.Hex()
+	blockNum := int64(event.Log.BlockNumber)
 
 	// Close current position if it exists
 	if currentPosition != nil {
-		endHeight := uint64(event.Log.BlockNumber - 1)
-		updates = append(updates, PositionUpdate{
-			Id:                  &currentPosition.ID,
-			EthereumAddress:     ethereumAddress,
-			ContractAddress:     event.Log.Address.Hex(),
-			AmountShares:        currentPosition.AmountShares,
-			PositionStartHeight: uint64(currentPosition.PositionStartHeight),
+
+		updates = append(updates, database.PublicPositionsUpdate{
+			Id:                  &currentPosition.Id,
+			EthereumAddress:     &ethereumAddress,
+			ContractAddress:     &contractAddr,
+			AmountShares:        &currentPosition.AmountShares,
+			PositionStartHeight: &currentPosition.PositionStartHeight,
 			PositionEndHeight:   &endHeight,
-			IsTerminated:        newAmount == "0",
+			IsTerminated:        &isTerminated,
 			NeutronAddress:      neutronAddress,
-			IsDeposit:           isDeposit,
-			IsWithdraw:          isWithdraw,
 		})
 	}
-
 	// Create new position if amount_shares is not zero
 	if newAmount != "0" {
-		var newPosition = PositionUpdate{
+		newIsTerminated := false
+		var newPosition = database.PublicPositionsInsert{
 			EthereumAddress:     ethereumAddress,
-			ContractAddress:     event.Log.Address.Hex(),
+			ContractAddress:     contractAddr,
 			AmountShares:        newAmount,
-			PositionStartHeight: event.Log.BlockNumber,
+			PositionStartHeight: blockNum,
 			PositionEndHeight:   nil,
-			IsTerminated:        false,
+			IsTerminated:        &newIsTerminated,
 			NeutronAddress:      nil,
-			IsDeposit:           isDeposit,
-			IsWithdraw:          isWithdraw,
 		}
-
-		updates = append(updates, newPosition)
+		inserts = append(inserts, newPosition)
 	}
 
-	log.Printf("Making Updates EVENTNAME: %v, updates: %v", event.EventName, updates)
-
-	return updates, nil
+	return inserts, updates, nil
 }

@@ -6,13 +6,12 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/timewave/vault-indexer/internal/database"
-
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	supa "github.com/supabase-community/supabase-go"
+	"github.com/timewave/vault-indexer/internal/database"
 )
 
 // EventProcessor handles blockchain event processing and storage
@@ -87,7 +86,7 @@ func (e *EventProcessor) ProcessEvent(vLog types.Log, event abi.Event, contractN
 		return nil, fmt.Errorf("failed to marshal event data: %w", err)
 	}
 
-	eventRecord := database.PublicEventsInsert{
+	eventRecord := &database.PublicEventsInsert{
 		ContractAddress: vLog.Address.Hex(),
 		EventName:       event.Name,
 		BlockNumber:     int64(vLog.BlockNumber),
