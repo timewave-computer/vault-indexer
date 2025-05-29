@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/timewave/vault-indexer/internal/database"
+
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -85,14 +87,13 @@ func (e *EventProcessor) ProcessEvent(vLog types.Log, event abi.Event, contractN
 		return nil, fmt.Errorf("failed to marshal event data: %w", err)
 	}
 
-	// Create the event record matching the database schema
-	eventRecord := map[string]interface{}{
-		"contract_address": vLog.Address.Hex(),
-		"event_name":       event.Name,
-		"block_number":     vLog.BlockNumber,
-		"transaction_hash": vLog.TxHash.Hex(),
-		"log_index":        vLog.Index,
-		"raw_data":         eventJSON,
+	eventRecord := database.PublicEventsInsert{
+		ContractAddress: vLog.Address.Hex(),
+		EventName:       event.Name,
+		BlockNumber:     int64(vLog.BlockNumber),
+		TransactionHash: vLog.TxHash.Hex(),
+		LogIndex:        int32(vLog.Index),
+		RawData:         eventJSON,
 	}
 
 	// Insert into Supabase

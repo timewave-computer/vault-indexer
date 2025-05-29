@@ -38,6 +38,9 @@ npx supabase status
 # deploy schema to DB
 npx supabase migration up
 
+# update DB types
+npx supabase gen types --lang go --local > internal/database/types.go
+
 # to reset
 npx supabase db reset
 
