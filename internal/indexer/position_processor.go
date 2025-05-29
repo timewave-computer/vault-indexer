@@ -169,6 +169,7 @@ func (p *PositionProcessor) Stop() {
 func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPosition *Position) ([]PositionUpdate, error) {
 	var ethereumAddress string
 	var amount string
+	var neutronAddress *string
 
 	// Handle different event types
 	switch event.EventName {
@@ -193,6 +194,9 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 	case "Withdraw":
 		if owner, ok := event.EventData["sender"].(common.Address); ok {
 			ethereumAddress = owner.Hex()
+		}
+		if receiver, ok := event.EventData["receiver"].(string); ok {
+			neutronAddress = &receiver
 		}
 		if assets, ok := event.EventData["assets"].(*big.Int); ok {
 			// For withdrawals, we'll store the negative value as a string
@@ -232,9 +236,8 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 			Amount:              currentPosition.Amount.String(),
 			PositionStartHeight: uint64(currentPosition.PositionStartHeight),
 			PositionEndHeight:   &endHeight,
-
-			IsTerminated:   newAmount == "0",
-			NeutronAddress: nil,
+			IsTerminated:        newAmount == "0",
+			NeutronAddress:      neutronAddress,
 		})
 	}
 
@@ -246,9 +249,8 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 			Amount:              newAmount,
 			PositionStartHeight: event.Log.BlockNumber,
 			PositionEndHeight:   nil,
-
-			IsTerminated:   false,
-			NeutronAddress: nil,
+			IsTerminated:        false,
+			NeutronAddress:      nil,
 		})
 	}
 

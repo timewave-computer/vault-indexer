@@ -11,13 +11,14 @@ import (
 
 const VaultAddress = "0x0000000000000000000000000000000000000456"
 const UserAddress1 = "0x0000000000000000000000000000000000000123"
+const NeutronAddress1 = "neutron14wey3cpz2cxswu9u6gaalz2xxh03xdeyqal877"
 
 func toUint64Ptr(n int) *uint64 {
 	v := uint64(n)
 	return &v
 }
 
-func stringPtr(s string) *string {
+func toStringPtr(s string) *string {
 	return &s
 }
 
@@ -84,7 +85,7 @@ func TestProcessDeposit(t *testing.T) {
 				PositionStartHeight: 1000,
 				PositionEndHeight:   toUint64Ptr(1999),
 				IsTerminated:        false,
-				NeutronAddress:      nil,
+				NeutronAddress:      toStringPtr(NeutronAddress1),
 			},
 			{
 				EthereumAddress:     UserAddress1,
@@ -121,8 +122,9 @@ func TestProcessWithdraw(t *testing.T) {
 		var event = PositionEvent{
 			EventName: "Withdraw",
 			EventData: map[string]interface{}{
-				"sender": common.HexToAddress(UserAddress1),
-				"assets": big.NewInt(50),
+				"sender":   common.HexToAddress(UserAddress1),
+				"assets":   big.NewInt(50),
+				"receiver": NeutronAddress1,
 			},
 			Log: types.Log{
 				Address:     common.HexToAddress(VaultAddress),
@@ -134,19 +136,18 @@ func TestProcessWithdraw(t *testing.T) {
 				Id:                  &currentPosition.ID,
 				EthereumAddress:     UserAddress1,
 				ContractAddress:     VaultAddress,
-				Amount:              "50",
+				Amount:              "100",
 				PositionStartHeight: 1000,
 				PositionEndHeight:   toUint64Ptr(1999),
 				IsTerminated:        false,
-				NeutronAddress:      nil,
+				NeutronAddress:      toStringPtr(NeutronAddress1),
 			},
 			{
-				Id:                  &currentPosition.ID,
 				EthereumAddress:     UserAddress1,
 				ContractAddress:     VaultAddress,
 				Amount:              "50",
-				PositionStartHeight: 1000,
-				PositionEndHeight:   toUint64Ptr(1999),
+				PositionStartHeight: 2000,
+				PositionEndHeight:   nil,
 				IsTerminated:        false,
 				NeutronAddress:      nil,
 			},
