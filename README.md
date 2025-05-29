@@ -59,3 +59,8 @@ docker network prune
 # For production
 ./start.sh prod
 ```
+
+## Testing
+```
+go test ./internal/indexer -v
+```

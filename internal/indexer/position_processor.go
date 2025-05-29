@@ -182,8 +182,8 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 		if assets, ok := event.EventData["assets"].(*big.Int); ok {
 			amount = assets.String()
 		}
+
 		entryMethod = "deposit"
-		exitMethod = "deposit"
 
 	case "Transfer":
 		if to, ok := event.EventData["from"].(common.Address); ok {
@@ -193,7 +193,6 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, currentPos
 			amount = value.String()
 		}
 		entryMethod = "transfer"
-		exitMethod = "transfer"
 
 	case "Withdraw":
 		if owner, ok := event.EventData["sender"].(common.Address); ok {
