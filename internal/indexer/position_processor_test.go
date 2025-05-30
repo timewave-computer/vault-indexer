@@ -10,6 +10,7 @@ import (
 	"github.com/timewave/vault-indexer/internal/database"
 )
 
+const ZeroAddress = "0x0000000000000000000000000000000000000000"
 const VaultAddress = "0x0000000000000000000000000000000000000456"
 const UserAddress1 = "0x0000000000000000000000000000000000000123"
 const NeutronAddress1 = "neutron14wey3cpz2cxswu9u6gaalz2xxh03xdeyqal877"
@@ -32,17 +33,20 @@ func TestProcessDeposit(t *testing.T) {
 	t.Run("deposit, no existing position", func(t *testing.T) {
 		processor := &PositionProcessor{}
 		var event = PositionEvent{
-			EventName: "Deposit",
+			EventName: "Transfer",
 			EventData: map[string]interface{}{
-				"sender": common.HexToAddress(UserAddress1),
-				"assets": big.NewInt(50),
+				"from":  common.HexToAddress(ZeroAddress),
+				"to":    common.HexToAddress(UserAddress1),
+				"value": big.NewInt(50),
 			},
 			Log: types.Log{
 				Address:     common.HexToAddress(VaultAddress),
 				BlockNumber: 1000,
 			},
 		}
-		gotInserts, gotUpdates, err := processor.processPositionEvent(event, nil)
+		var senderPosition *database.PublicPositionsSelect = nil
+		var receiverPosition *database.PublicPositionsSelect = nil
+		gotInserts, gotUpdates, err := processor.processPositionEvent(event, senderPosition, receiverPosition)
 
 		var expectedInserts = []database.PublicPositionsInsert{
 			{
@@ -56,9 +60,12 @@ func TestProcessDeposit(t *testing.T) {
 			},
 		}
 
-		assert.NoError(t, err)
+		var expectedUpdates []database.PublicPositionsUpdate = nil
+
 		assert.Equal(t, expectedInserts, gotInserts)
-		assert.Equal(t, []database.PublicPositionsUpdate(nil), gotUpdates)
+		assert.Equal(t, expectedUpdates, gotUpdates)
+		assert.NoError(t, err)
+
 	})
 
 	t.Run("deposit, existing position ", func(t *testing.T) {
@@ -84,7 +91,7 @@ func TestProcessDeposit(t *testing.T) {
 				BlockNumber: 2000,
 			},
 		}
-		gotInserts, gotUpdates, err := processor.processPositionEvent(event, &currentPosition)
+		gotInserts, gotUpdates, err := processor.processPositionEvent(event, &currentPosition, nil)
 
 		var expectedUpdates = []database.PublicPositionsUpdate{
 			{
@@ -141,7 +148,7 @@ func TestProcessWithdraw(t *testing.T) {
 				BlockNumber: 2000,
 			},
 		}
-		gotInserts, gotUpdates, err := processor.processPositionEvent(event, &currentPosition)
+		gotInserts, gotUpdates, err := processor.processPositionEvent(event, &currentPosition, nil)
 
 		var expectedUpdates = []database.PublicPositionsUpdate{
 			{
@@ -194,7 +201,7 @@ func TestProcessWithdraw(t *testing.T) {
 				BlockNumber: 2000,
 			},
 		}
-		gotInserts, gotUpdates, err := processor.processPositionEvent(event, &currentPosition)
+		gotInserts, gotUpdates, err := processor.processPositionEvent(event, &currentPosition, nil)
 
 		var expectedUpdates = []database.PublicPositionsUpdate{
 			{
@@ -228,7 +235,7 @@ func TestProcessWithdraw(t *testing.T) {
 				BlockNumber: 2000,
 			},
 		}
-		gotInserts, gotUpdates, err := processor.processPositionEvent(event, nil)
+		gotInserts, gotUpdates, err := processor.processPositionEvent(event, nil, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, []database.PublicPositionsInsert(nil), gotInserts)
 		assert.Equal(t, []database.PublicPositionsUpdate(nil), gotUpdates)
