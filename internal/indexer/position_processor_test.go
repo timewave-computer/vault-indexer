@@ -13,6 +13,7 @@ import (
 const ZeroAddress = "0x0000000000000000000000000000000000000000"
 const VaultAddress = "0x0000000000000000000000000000000000000456"
 const UserAddress1 = "0x0000000000000000000000000000000000000123"
+const UserAddress2 = "0x0000000000000000000000000000000000000456"
 const NeutronAddress1 = "neutron14wey3cpz2cxswu9u6gaalz2xxh03xdeyqal877"
 
 func toStringPtr(s string) *string {
@@ -115,6 +116,139 @@ func TestProcessDeposit(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, expectedInserts, gotInserts)
 		assert.Equal(t, expectedUpdates, gotUpdates)
+	})
+}
+
+func TestProcessTransfer(t *testing.T) {
+	t.Run("transfer, no existing position", func(t *testing.T) {
+		processor := &PositionProcessor{}
+		var event = PositionEvent{
+			EventName: "Transfer",
+			EventData: map[string]interface{}{
+				"from":  common.HexToAddress(UserAddress1),
+				"to":    common.HexToAddress(UserAddress2),
+				"value": big.NewInt(100),
+			},
+			Log: types.Log{
+				Address:     common.HexToAddress(VaultAddress),
+				BlockNumber: 2000,
+			},
+		}
+		var senderPosition = &database.PublicPositionsSelect{
+			Id:                  1,
+			AmountShares:        "100",
+			PositionEndHeight:   nil,
+			IsTerminated:        false,
+			NeutronAddress:      nil,
+			PositionStartHeight: 1000,
+			EthereumAddress:     UserAddress1,
+			ContractAddress:     VaultAddress,
+		}
+
+		var receiverPosition *database.PublicPositionsSelect = nil
+		gotInserts, gotUpdates, err := processor.processPositionEvent(event, receiverPosition, senderPosition)
+
+		var expectedInserts = []database.PublicPositionsInsert{
+			{
+				EthereumAddress:     UserAddress2,
+				ContractAddress:     VaultAddress,
+				AmountShares:        "100",
+				PositionStartHeight: 2000,
+				PositionEndHeight:   nil,
+				IsTerminated:        toBoolPtr(false),
+				NeutronAddress:      nil,
+			},
+		}
+
+		var expectedUpdates = []database.PublicPositionsUpdate{
+			{
+				Id:                &senderPosition.Id,
+				PositionEndHeight: toInt64Ptr(1999),
+				IsTerminated:      toBoolPtr(true),
+			},
+		}
+
+		assert.Equal(t, expectedInserts, gotInserts)
+		assert.Equal(t, expectedUpdates, gotUpdates)
+		assert.NoError(t, err)
+
+	})
+
+	t.Run("transfer, existing position", func(t *testing.T) {
+		processor := &PositionProcessor{}
+		var event = PositionEvent{
+			EventName: "Transfer",
+			EventData: map[string]interface{}{
+				"from":  common.HexToAddress(UserAddress1),
+				"to":    common.HexToAddress(UserAddress2),
+				"value": big.NewInt(50),
+			},
+			Log: types.Log{
+				Address:     common.HexToAddress(VaultAddress),
+				BlockNumber: 2000,
+			},
+		}
+		var senderPosition = &database.PublicPositionsSelect{
+			Id:                  1,
+			AmountShares:        "100",
+			PositionEndHeight:   nil,
+			IsTerminated:        false,
+			NeutronAddress:      nil,
+			PositionStartHeight: 1000,
+			EthereumAddress:     UserAddress1,
+			ContractAddress:     VaultAddress,
+		}
+
+		var receiverPosition = &database.PublicPositionsSelect{
+			Id:                  1,
+			AmountShares:        "100",
+			PositionEndHeight:   nil,
+			IsTerminated:        false,
+			NeutronAddress:      nil,
+			PositionStartHeight: 1000,
+			EthereumAddress:     UserAddress2,
+			ContractAddress:     VaultAddress,
+		}
+		gotInserts, gotUpdates, err := processor.processPositionEvent(event, receiverPosition, senderPosition)
+
+		var expectedInserts = []database.PublicPositionsInsert{
+			{
+				EthereumAddress:     UserAddress2,
+				ContractAddress:     VaultAddress,
+				AmountShares:        "150",
+				PositionStartHeight: 2000,
+				PositionEndHeight:   nil,
+				IsTerminated:        nil,
+				NeutronAddress:      nil,
+			},
+			{
+				EthereumAddress:     UserAddress1,
+				ContractAddress:     VaultAddress,
+				AmountShares:        "50",
+				PositionStartHeight: 2000,
+				PositionEndHeight:   nil,
+				IsTerminated:        nil,
+				NeutronAddress:      nil,
+			},
+		}
+
+		var expectedUpdates = []database.PublicPositionsUpdate{
+			{
+				Id:                &receiverPosition.Id,
+				PositionEndHeight: toInt64Ptr(1999),
+				IsTerminated:      toBoolPtr(false),
+			},
+			{
+				Id:                &senderPosition.Id,
+				PositionEndHeight: toInt64Ptr(1999),
+				IsTerminated:      toBoolPtr(false),
+			},
+		}
+
+		assert.Equal(t, expectedInserts, gotInserts)
+		assert.Equal(t, expectedUpdates, gotUpdates)
+		assert.NoError(t, err)
+
 	})
 }
 

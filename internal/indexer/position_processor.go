@@ -166,7 +166,6 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPo
 	if receiverAddress == ZERO_ADDRESS.Hex() {
 		// do nothing
 	} else if receiverPosition == nil {
-		isTerminated := false // this is only incrementing, can't be terminated
 		// create a new position
 		inserts = append(inserts, database.PublicPositionsInsert{
 			EthereumAddress:     receiverAddress,
@@ -174,7 +173,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPo
 			AmountShares:        amount_shares,
 			PositionStartHeight: int64(event.Log.BlockNumber),
 			PositionEndHeight:   nil,
-			IsTerminated:        &isTerminated,
+			IsTerminated:        nil, // this is only incrementing, can't be terminated
 			NeutronAddress:      nil,
 		})
 	} else {
