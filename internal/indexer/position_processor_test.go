@@ -68,9 +68,9 @@ func TestProcessDeposit(t *testing.T) {
 
 	})
 
-	t.Run("deposit, existing position ", func(t *testing.T) {
+	t.Run("deposit, existing position", func(t *testing.T) {
 		processor := &PositionProcessor{}
-		var currentPosition = database.PublicPositionsSelect{
+		var receiverPosition = database.PublicPositionsSelect{
 			Id:                  1,
 			AmountShares:        "100",
 			PositionEndHeight:   nil,
@@ -81,28 +81,24 @@ func TestProcessDeposit(t *testing.T) {
 			ContractAddress:     VaultAddress,
 		}
 		var event = PositionEvent{
-			EventName: "Deposit",
+			EventName: "Transfer",
 			EventData: map[string]interface{}{
-				"sender": common.HexToAddress(UserAddress1),
-				"assets": big.NewInt(50),
+				"from":  common.HexToAddress(ZeroAddress),
+				"to":    common.HexToAddress(UserAddress1),
+				"value": big.NewInt(50),
 			},
 			Log: types.Log{
 				Address:     common.HexToAddress(VaultAddress),
 				BlockNumber: 2000,
 			},
 		}
-		gotInserts, gotUpdates, err := processor.processPositionEvent(event, &currentPosition, nil)
+		gotInserts, gotUpdates, err := processor.processPositionEvent(event, &receiverPosition, nil)
 
 		var expectedUpdates = []database.PublicPositionsUpdate{
 			{
-				Id:                  &currentPosition.Id,
-				EthereumAddress:     toStringPtr(UserAddress1),
-				ContractAddress:     toStringPtr(VaultAddress),
-				AmountShares:        toStringPtr("100"),
-				PositionStartHeight: toInt64Ptr(1000),
-				PositionEndHeight:   toInt64Ptr(1999),
-				IsTerminated:        toBoolPtr(false),
-				NeutronAddress:      nil,
+				Id:                &receiverPosition.Id,
+				PositionEndHeight: toInt64Ptr(1999),
+				IsTerminated:      toBoolPtr(false),
 			},
 		}
 		var expectedInserts = []database.PublicPositionsInsert{
@@ -112,7 +108,7 @@ func TestProcessDeposit(t *testing.T) {
 				AmountShares:        "150",
 				PositionStartHeight: 2000,
 				PositionEndHeight:   nil,
-				IsTerminated:        toBoolPtr(false),
+				IsTerminated:        nil,
 				NeutronAddress:      nil,
 			},
 		}

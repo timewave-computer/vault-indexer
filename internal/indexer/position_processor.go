@@ -139,7 +139,7 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 	return nil
 }
 
-func (p *PositionProcessor) processPositionEvent(event PositionEvent, senderPosition *database.PublicPositionsSelect, receiverPosition *database.PublicPositionsSelect) ([]database.PublicPositionsInsert, []database.PublicPositionsUpdate, error) {
+func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPosition *database.PublicPositionsSelect, senderPosition *database.PublicPositionsSelect) ([]database.PublicPositionsInsert, []database.PublicPositionsUpdate, error) {
 	var receiverAddress string
 	var senderAddress string
 
@@ -219,19 +219,17 @@ func updatePosition(
 	var insert database.PublicPositionsInsert
 	var update database.PublicPositionsUpdate
 
-	if currentPosition == nil {
-		insert = database.PublicPositionsInsert{
-			EthereumAddress:     address,
-			ContractAddress:     currentPosition.ContractAddress,
-			AmountShares:        newAmountShares,
-			PositionStartHeight: int64(blockNumber),
-		}
-	} else {
-		update = database.PublicPositionsUpdate{
-			Id:                &currentPosition.Id,
-			PositionEndHeight: &endHeight,
-			IsTerminated:      &isTerminated,
-		}
+	insert = database.PublicPositionsInsert{
+		EthereumAddress:     address,
+		ContractAddress:     currentPosition.ContractAddress,
+		AmountShares:        newAmountShares,
+		PositionStartHeight: int64(blockNumber),
+	}
+
+	update = database.PublicPositionsUpdate{
+		Id:                &currentPosition.Id,
+		PositionEndHeight: &endHeight,
+		IsTerminated:      &isTerminated,
 	}
 
 	return insert, update
