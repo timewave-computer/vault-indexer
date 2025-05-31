@@ -140,21 +140,21 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 }
 
 func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPosition *database.PublicPositionsSelect, senderPosition *database.PublicPositionsSelect) ([]database.PublicPositionsInsert, []database.PublicPositionsUpdate, error) {
-	var receiverAddress string
-	var senderAddress string
 
 	var updates []database.PublicPositionsUpdate
 	var inserts []database.PublicPositionsInsert
 
-	if receiver, ok := event.EventData["to"].(common.Address); ok {
-		receiverAddress = receiver.Hex()
-	}
-	if sender, ok := event.EventData["from"].(common.Address); ok {
-		senderAddress = sender.Hex()
-	}
-
 	switch event.EventName {
 	case "Transfer":
+
+		var receiverAddress string
+		var senderAddress string
+		if receiver, ok := event.EventData["to"].(common.Address); ok {
+			receiverAddress = receiver.Hex()
+		}
+		if sender, ok := event.EventData["from"].(common.Address); ok {
+			senderAddress = sender.Hex()
+		}
 		// 1. update receiver. if receiver address is 0x0000000000000000000000000000000000000000, do not process reciever position change
 		// 2. update sender. if sender address 0x0000000000000000000000000000000000000000, do not process sender position change
 
@@ -184,8 +184,12 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPo
 		} else {
 			// update receiver position
 			insert, update := updatePosition(receiverPosition, receiverAddress, amount_shares, event.Log.BlockNumber, true)
-			updates = append(updates, update)
-			inserts = append(inserts, insert)
+			if update != nil {
+				updates = append(updates, *update)
+			}
+			if insert != nil {
+				inserts = append(inserts, *insert)
+			}
 		}
 
 		if senderAddress == ZERO_ADDRESS.Hex() {
@@ -195,9 +199,11 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPo
 		} else {
 			// update sender position
 			insert, update := updatePosition(senderPosition, senderAddress, amount_shares, event.Log.BlockNumber, false)
-			updates = append(updates, update)
-			if !*update.IsTerminated {
-				inserts = append(inserts, insert)
+			if update != nil {
+				updates = append(updates, *update)
+			}
+			if insert != nil {
+				inserts = append(inserts, *insert)
 			}
 		}
 
@@ -205,13 +211,23 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPo
 		// update withdrawer position
 		var amount_shares string
 		var neutronAddress = event.EventData["receiver"].(string)
+
 		if value, ok := event.EventData["shares"].(*big.Int); ok {
 			amount_shares = value.String()
 		}
+		var senderAddress string
+		if sender, ok := event.EventData["owner"].(common.Address); ok {
+			senderAddress = sender.Hex()
+		}
+
 		insert, update := updatePosition(senderPosition, senderAddress, amount_shares, event.Log.BlockNumber, false)
-		update.NeutronAddress = &neutronAddress
-		updates = append(updates, update)
-		inserts = append(inserts, insert)
+		if update != nil {
+			update.NeutronAddress = &neutronAddress
+			updates = append(updates, *update)
+		}
+		if insert != nil {
+			inserts = append(inserts, *insert)
+		}
 
 	default:
 		// exit early
@@ -227,16 +243,19 @@ func updatePosition(
 	amountShares string,
 	blockNumber uint64,
 	isAddition bool,
-) (database.PublicPositionsInsert, database.PublicPositionsUpdate) {
+) (*database.PublicPositionsInsert, *database.PublicPositionsUpdate) {
+	if currentPosition == nil {
+		return nil, nil
+	}
 	newAmountShares := computeNewAmountShares(currentPosition, amountShares, isAddition)
 	endHeight := int64(blockNumber - 1)
 	var isTerminated = newAmountShares == "0" // will only be relevant if not adding
 
-	var insert database.PublicPositionsInsert
-	var update database.PublicPositionsUpdate
+	var insert *database.PublicPositionsInsert
+	var update *database.PublicPositionsUpdate
 
 	if !isTerminated {
-		insert = database.PublicPositionsInsert{
+		insert = &database.PublicPositionsInsert{
 			EthereumAddress:     address,
 			ContractAddress:     currentPosition.ContractAddress,
 			AmountShares:        newAmountShares,
@@ -244,7 +263,7 @@ func updatePosition(
 		}
 	}
 
-	update = database.PublicPositionsUpdate{
+	update = &database.PublicPositionsUpdate{
 		Id:                &currentPosition.Id,
 		PositionEndHeight: &endHeight,
 		IsTerminated:      &isTerminated,

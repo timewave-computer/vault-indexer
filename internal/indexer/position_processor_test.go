@@ -270,7 +270,7 @@ func TestProcessWithdraw(t *testing.T) {
 			EventName: "WithdrawRequested",
 			EventData: map[string]interface{}{
 				"owner":    common.HexToAddress(UserAddress1),
-				"assets":   big.NewInt(50),
+				"shares":   big.NewInt(50),
 				"receiver": NeutronAddress1,
 			},
 			Log: types.Log{
@@ -278,18 +278,14 @@ func TestProcessWithdraw(t *testing.T) {
 				BlockNumber: 2000,
 			},
 		}
-		gotInserts, gotUpdates, err := processor.processPositionEvent(event, &currentPosition, nil)
+		gotInserts, gotUpdates, err := processor.processPositionEvent(event, nil, &currentPosition)
 
 		var expectedUpdates = []database.PublicPositionsUpdate{
 			{
-				Id:                  &currentPosition.Id,
-				EthereumAddress:     toStringPtr(UserAddress1),
-				ContractAddress:     toStringPtr(VaultAddress),
-				AmountShares:        toStringPtr("100"),
-				PositionStartHeight: toInt64Ptr(1000),
-				PositionEndHeight:   toInt64Ptr(1999),
-				IsTerminated:        toBoolPtr(false),
-				NeutronAddress:      toStringPtr(NeutronAddress1),
+				Id:                &currentPosition.Id,
+				PositionEndHeight: toInt64Ptr(1999),
+				IsTerminated:      toBoolPtr(false),
+				NeutronAddress:    toStringPtr(NeutronAddress1),
 			},
 		}
 		var expectedInserts = []database.PublicPositionsInsert{
@@ -299,7 +295,7 @@ func TestProcessWithdraw(t *testing.T) {
 				AmountShares:        "50",
 				PositionStartHeight: 2000,
 				PositionEndHeight:   nil,
-				IsTerminated:        toBoolPtr(false),
+				IsTerminated:        nil,
 			},
 		}
 		assert.NoError(t, err)
@@ -333,7 +329,7 @@ func TestProcessWithdraw(t *testing.T) {
 		}
 		gotInserts, gotUpdates, err := processor.processPositionEvent(event, nil, &senderPosition)
 
-		var expectedInserts = []database.PublicPositionsInsert{}
+		var expectedInserts = []database.PublicPositionsInsert(nil)
 		var expectedUpdates = []database.PublicPositionsUpdate{
 			{
 				Id:                &senderPosition.Id,
@@ -366,5 +362,62 @@ func TestProcessWithdraw(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, []database.PublicPositionsInsert(nil), gotInserts)
 		assert.Equal(t, []database.PublicPositionsUpdate(nil), gotUpdates)
+	})
+}
+
+func TestUpdatePosition(t *testing.T) {
+	t.Run("update position with addition", func(t *testing.T) {
+		currentPosition := &database.PublicPositionsSelect{
+			Id:                  1,
+			AmountShares:        "100",
+			PositionEndHeight:   nil,
+			IsTerminated:        false,
+			NeutronAddress:      nil,
+			PositionStartHeight: 1000,
+			EthereumAddress:     UserAddress1,
+			ContractAddress:     VaultAddress,
+		}
+
+		insert, update := updatePosition(currentPosition, UserAddress1, "50", 2000, true)
+
+		expectedInsert := &database.PublicPositionsInsert{
+			EthereumAddress:     UserAddress1,
+			ContractAddress:     VaultAddress,
+			AmountShares:        "150",
+			PositionStartHeight: 2000,
+		}
+
+		expectedUpdate := &database.PublicPositionsUpdate{
+			Id:                &currentPosition.Id,
+			PositionEndHeight: toInt64Ptr(1999),
+			IsTerminated:      toBoolPtr(false),
+		}
+
+		assert.Equal(t, expectedInsert, insert)
+		assert.Equal(t, expectedUpdate, update)
+	})
+
+	t.Run("update position with subtraction to zero", func(t *testing.T) {
+		currentPosition := &database.PublicPositionsSelect{
+			Id:                  1,
+			AmountShares:        "100",
+			PositionEndHeight:   nil,
+			IsTerminated:        false,
+			NeutronAddress:      nil,
+			PositionStartHeight: 1000,
+			EthereumAddress:     UserAddress1,
+			ContractAddress:     VaultAddress,
+		}
+
+		insert, update := updatePosition(currentPosition, UserAddress1, "100", 2000, false)
+
+		expectedUpdate := &database.PublicPositionsUpdate{
+			Id:                &currentPosition.Id,
+			PositionEndHeight: toInt64Ptr(1999),
+			IsTerminated:      toBoolPtr(true),
+		}
+
+		assert.Nil(t, insert)
+		assert.Equal(t, expectedUpdate, update)
 	})
 }
