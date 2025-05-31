@@ -56,7 +56,7 @@ func TestProcessDeposit(t *testing.T) {
 				AmountShares:        "50",
 				PositionStartHeight: 1000,
 				PositionEndHeight:   nil,
-				IsTerminated:        toBoolPtr(false),
+				IsTerminated:        nil,
 				NeutronAddress:      nil,
 			},
 		}
@@ -155,7 +155,7 @@ func TestProcessTransfer(t *testing.T) {
 				AmountShares:        "100",
 				PositionStartHeight: 2000,
 				PositionEndHeight:   nil,
-				IsTerminated:        toBoolPtr(false),
+				IsTerminated:        nil,
 				NeutronAddress:      nil,
 			},
 		}

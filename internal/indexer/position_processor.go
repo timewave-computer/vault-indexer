@@ -158,47 +158,58 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPo
 		amount_shares = value.String()
 	}
 
-	// update receiver
-	// if receiver address is 0x0000000000000000000000000000000000000000, do not process reciever position change
-	// if reciever position is nil, create a new position
-	// else update reciever position
+	switch event.EventName {
+	case "Transfer":
+		// 1. update receiver. if receiver address is 0x0000000000000000000000000000000000000000, do not process reciever position change
+		// 2. update sender. if sender address 0x0000000000000000000000000000000000000000, do not process sender position change
 
-	if receiverAddress == ZERO_ADDRESS.Hex() {
-		// do nothing
-	} else if receiverPosition == nil {
-		// create a new position
-		inserts = append(inserts, database.PublicPositionsInsert{
-			EthereumAddress:     receiverAddress,
-			ContractAddress:     event.Log.Address.Hex(),
-			AmountShares:        amount_shares,
-			PositionStartHeight: int64(event.Log.BlockNumber),
-			PositionEndHeight:   nil,
-			IsTerminated:        nil, // this is only incrementing, can't be terminated
-			NeutronAddress:      nil,
-		})
-	} else {
-		// update receiver position
-		insert, update := updatePosition(receiverPosition, receiverAddress, amount_shares, event.Log.BlockNumber, true)
-		updates = append(updates, update)
-		inserts = append(inserts, insert)
-	}
-
-	// update sender
-	// is sender address 0x0000000000000000000000000000000000000000, do not process sender position change
-	// if sender address is nil, do nothing (there should be one, just fail silently for now)
-	// update sender position
-
-	if senderAddress == ZERO_ADDRESS.Hex() {
-		// do nothing
-	} else if senderPosition == nil {
-		// do nothing
-	} else {
-		// update sender position
-		insert, update := updatePosition(senderPosition, senderAddress, amount_shares, event.Log.BlockNumber, false)
-		updates = append(updates, update)
-		if !*update.IsTerminated {
+		var isWithdraw = receiverAddress == ZERO_ADDRESS.Hex()
+		if isWithdraw {
+			// exit early
+			return inserts, updates, nil
+		}
+		if receiverAddress == ZERO_ADDRESS.Hex() {
+			// do nothing
+		} else if receiverPosition == nil {
+			// create a new position
+			inserts = append(inserts, database.PublicPositionsInsert{
+				EthereumAddress:     receiverAddress,
+				ContractAddress:     event.Log.Address.Hex(),
+				AmountShares:        amount_shares,
+				PositionStartHeight: int64(event.Log.BlockNumber),
+				PositionEndHeight:   nil,
+				IsTerminated:        nil, // this is only incrementing, can't be terminated
+				NeutronAddress:      nil,
+			})
+		} else {
+			// update receiver position
+			insert, update := updatePosition(receiverPosition, receiverAddress, amount_shares, event.Log.BlockNumber, true)
+			updates = append(updates, update)
 			inserts = append(inserts, insert)
 		}
+
+		if senderAddress == ZERO_ADDRESS.Hex() {
+			// do nothing
+		} else if senderPosition == nil {
+			// do nothing
+		} else {
+			// update sender position
+			insert, update := updatePosition(senderPosition, senderAddress, amount_shares, event.Log.BlockNumber, false)
+			updates = append(updates, update)
+			if !*update.IsTerminated {
+				inserts = append(inserts, insert)
+			}
+		}
+
+	case "WithdrawRequested":
+		// update withdrawer position
+		insert, update := updatePosition(senderPosition, senderAddress, amount_shares, event.Log.BlockNumber, false)
+		updates = append(updates, update)
+		inserts = append(inserts, insert)
+
+	default:
+		// exit early
+		return inserts, updates, nil
 	}
 
 	return inserts, updates, nil
