@@ -309,7 +309,7 @@ func TestProcessWithdraw(t *testing.T) {
 
 	t.Run("full withdraw", func(t *testing.T) {
 		processor := &PositionProcessor{}
-		var currentPosition = database.PublicPositionsSelect{
+		var senderPosition = database.PublicPositionsSelect{
 			Id:                  1,
 			AmountShares:        "100",
 			PositionEndHeight:   nil,
@@ -323,7 +323,7 @@ func TestProcessWithdraw(t *testing.T) {
 			EventName: "WithdrawRequested",
 			EventData: map[string]interface{}{
 				"owner":    common.HexToAddress(UserAddress1),
-				"assets":   big.NewInt(100),
+				"shares":   big.NewInt(100),
 				"receiver": NeutronAddress1,
 			},
 			Log: types.Log{
@@ -331,23 +331,20 @@ func TestProcessWithdraw(t *testing.T) {
 				BlockNumber: 2000,
 			},
 		}
-		gotInserts, gotUpdates, err := processor.processPositionEvent(event, &currentPosition, nil)
+		gotInserts, gotUpdates, err := processor.processPositionEvent(event, nil, &senderPosition)
 
+		var expectedInserts = []database.PublicPositionsInsert{}
 		var expectedUpdates = []database.PublicPositionsUpdate{
 			{
-				Id:                  &currentPosition.Id,
-				EthereumAddress:     toStringPtr(UserAddress1),
-				ContractAddress:     toStringPtr(VaultAddress),
-				AmountShares:        toStringPtr("100"),
-				PositionStartHeight: toInt64Ptr(1000),
-				PositionEndHeight:   toInt64Ptr(1999),
-				IsTerminated:        toBoolPtr(true),
-				NeutronAddress:      toStringPtr(NeutronAddress1),
+				Id:                &senderPosition.Id,
+				PositionEndHeight: toInt64Ptr(1999),
+				IsTerminated:      toBoolPtr(true),
+				NeutronAddress:    toStringPtr(NeutronAddress1),
 			},
 		}
 
 		assert.NoError(t, err)
-		assert.Equal(t, []database.PublicPositionsInsert(nil), gotInserts)
+		assert.Equal(t, expectedInserts, gotInserts)
 		assert.Equal(t, expectedUpdates, gotUpdates)
 	})
 

@@ -143,8 +143,6 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPo
 	var receiverAddress string
 	var senderAddress string
 
-	var amount_shares string
-
 	var updates []database.PublicPositionsUpdate
 	var inserts []database.PublicPositionsInsert
 
@@ -154,16 +152,18 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPo
 	if sender, ok := event.EventData["from"].(common.Address); ok {
 		senderAddress = sender.Hex()
 	}
-	if value, ok := event.EventData["value"].(*big.Int); ok {
-		amount_shares = value.String()
-	}
 
 	switch event.EventName {
 	case "Transfer":
 		// 1. update receiver. if receiver address is 0x0000000000000000000000000000000000000000, do not process reciever position change
 		// 2. update sender. if sender address 0x0000000000000000000000000000000000000000, do not process sender position change
 
+		var amount_shares string
 		var isWithdraw = receiverAddress == ZERO_ADDRESS.Hex()
+		if value, ok := event.EventData["value"].(*big.Int); ok {
+			amount_shares = value.String()
+		}
+
 		if isWithdraw {
 			// exit early
 			return inserts, updates, nil
@@ -203,7 +203,13 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPo
 
 	case "WithdrawRequested":
 		// update withdrawer position
+		var amount_shares string
+		var neutronAddress = event.EventData["receiver"].(string)
+		if value, ok := event.EventData["shares"].(*big.Int); ok {
+			amount_shares = value.String()
+		}
 		insert, update := updatePosition(senderPosition, senderAddress, amount_shares, event.Log.BlockNumber, false)
+		update.NeutronAddress = &neutronAddress
 		updates = append(updates, update)
 		inserts = append(inserts, insert)
 
@@ -224,16 +230,18 @@ func updatePosition(
 ) (database.PublicPositionsInsert, database.PublicPositionsUpdate) {
 	newAmountShares := computeNewAmountShares(currentPosition, amountShares, isAddition)
 	endHeight := int64(blockNumber - 1)
-	isTerminated := newAmountShares == "0" // will only be relevant if not adding
+	var isTerminated = newAmountShares == "0" // will only be relevant if not adding
 
 	var insert database.PublicPositionsInsert
 	var update database.PublicPositionsUpdate
 
-	insert = database.PublicPositionsInsert{
-		EthereumAddress:     address,
-		ContractAddress:     currentPosition.ContractAddress,
-		AmountShares:        newAmountShares,
-		PositionStartHeight: int64(blockNumber),
+	if !isTerminated {
+		insert = database.PublicPositionsInsert{
+			EthereumAddress:     address,
+			ContractAddress:     currentPosition.ContractAddress,
+			AmountShares:        newAmountShares,
+			PositionStartHeight: int64(blockNumber),
+		}
 	}
 
 	update = database.PublicPositionsUpdate{
