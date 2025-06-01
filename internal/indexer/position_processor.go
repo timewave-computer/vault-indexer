@@ -173,7 +173,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, senderPos 
 		}
 
 		if isWithdraw {
-			// exit early
+			// exit early.  This is will written by the withdraw event, which includes the same info + the neutron address
 			return inserts, updates, nil
 		}
 		if receiverAddress == ZERO_ADDRESS.Hex() {
@@ -257,7 +257,10 @@ func updatePosition(
 	}
 	newAmountShares := computeNewAmountShares(currentPosition, amountShares, isAddition)
 	endHeight := int64(blockNumber - 1)
-	var isTerminated = newAmountShares == "0" // will only be relevant if not adding
+
+	// Check if the position should be terminated (either zero balance)
+	var isTerminated bool
+	isTerminated = newAmountShares == "0"
 
 	var insert *database.PublicPositionsInsert
 	var update *database.PublicPositionsUpdate
@@ -310,6 +313,10 @@ func computeNewAmountShares(currentPosition *database.PublicPositionsSelect, new
 		newBigInt.Add(currentBigInt, newBigInt)
 	} else {
 		newBigInt.Sub(currentBigInt, newBigInt)
+		// If subtraction results in negative value, clamp to zero
+		if newBigInt.Sign() < 0 {
+			newBigInt.SetInt64(0)
+		}
 	}
 	return newBigInt.String()
 }
