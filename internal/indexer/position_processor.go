@@ -3,12 +3,14 @@ package indexer
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math/big"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/supabase-community/postgrest-go"
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/internal/database"
 )
@@ -54,6 +56,7 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 				// Get current position if it exists
 				var senderAddress string
 				var receiverAddress string
+				var contractAddress = event.Log.Address.Hex()
 				var receiverPosition *database.PublicPositionsSelect
 				var senderPosition *database.PublicPositionsSelect
 
@@ -77,7 +80,9 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 					data, _, err := p.db.From("positions").
 						Select("*", "", false).
 						Eq("ethereum_address", senderAddress).
-						Eq("contract_address", event.Log.Address.Hex()).
+						Eq("contract_address", contractAddress).
+						Order("id", &postgrest.OrderOpts{Ascending: false}).
+						Limit(1, "").
 						Single().
 						Execute()
 
@@ -89,44 +94,48 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 						}
 						senderPosition = &pos
 					}
+				}
 
-					if receiverAddress != "" && receiverAddress != ZERO_ADDRESS.Hex() {
-						data, _, err := p.db.From("positions").
-							Select("*", "", false).
-							Eq("ethereum_address", receiverAddress).
-							Eq("contract_address", event.Log.Address.Hex()).
-							Single().
-							Execute()
+				if receiverAddress != "" && receiverAddress != ZERO_ADDRESS.Hex() {
+					data, _, err := p.db.From("positions").
+						Select("*", "", false).
+						Eq("ethereum_address", receiverAddress).
+						Eq("contract_address", contractAddress).
+						Order("id", &postgrest.OrderOpts{Ascending: false}).
+						Limit(1, "").
+						Single().
+						Execute()
 
-						if err == nil {
-							var pos database.PublicPositionsSelect
-							if err := json.Unmarshal(data, &pos); err != nil {
-								log.Printf("Error unmarshaling current position: %v", err)
-								continue
-							}
-							receiverPosition = &pos
+					if err == nil {
+						var pos database.PublicPositionsSelect
+						if err := json.Unmarshal(data, &pos); err != nil {
+							log.Printf("Error unmarshaling current position: %v", err)
+							continue
 						}
+						receiverPosition = &pos
 					}
 				}
 
 				// Process the event
-				inserts, updates, err := p.processPositionEvent(event, senderPosition, receiverPosition)
+				inserts, updates, err := p.processPositionEvent(event, receiverPosition, senderPosition)
 				if err != nil {
 					log.Printf("Error processing position event: %v", err)
 					continue
 				}
 
+				for _, update := range updates {
+					_, _, err = p.db.From("positions").Update(update, "", "").
+						Eq("id", fmt.Sprintf("%v", *update.Id)).
+						Execute()
+					if err != nil {
+						log.Printf("Error updating position: %v", err)
+						continue
+					}
+				}
 				for _, insert := range inserts {
 					_, _, err = p.db.From("positions").Insert(insert, false, "", "", "").Execute()
 					if err != nil {
 						log.Printf("Error inserting new position: %v", err)
-						continue
-					}
-				}
-				for _, update := range updates {
-					_, _, err = p.db.From("positions").Update(update, "", "").Execute()
-					if err != nil {
-						log.Printf("Error updating position: %v", err)
 						continue
 					}
 				}
@@ -146,7 +155,6 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPo
 
 	switch event.EventName {
 	case "Transfer":
-
 		var receiverAddress string
 		var senderAddress string
 		if receiver, ok := event.EventData["to"].(common.Address); ok {
@@ -264,9 +272,18 @@ func updatePosition(
 	}
 
 	update = &database.PublicPositionsUpdate{
-		Id:                &currentPosition.Id,
-		PositionEndHeight: &endHeight,
+		Id: &currentPosition.Id,
+
+		// new values
 		IsTerminated:      &isTerminated,
+		PositionEndHeight: &endHeight,
+
+		// preserve
+		ContractAddress:     &currentPosition.ContractAddress,
+		EthereumAddress:     &currentPosition.EthereumAddress,
+		AmountShares:        &currentPosition.AmountShares,
+		PositionStartHeight: &currentPosition.PositionStartHeight,
+		CreatedAt:           &currentPosition.CreatedAt,
 	}
 
 	return insert, update
