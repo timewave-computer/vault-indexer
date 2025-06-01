@@ -93,7 +93,7 @@ func TestProcessDeposit(t *testing.T) {
 				BlockNumber: 2000,
 			},
 		}
-		gotInserts, gotUpdates, err := processor.processPositionEvent(event, &receiverPosition, nil)
+		gotInserts, gotUpdates, err := processor.processPositionEvent(event, nil, &receiverPosition)
 
 		var expectedUpdates = []database.PublicPositionsUpdate{
 			{
@@ -146,7 +146,7 @@ func TestProcessTransfer(t *testing.T) {
 		}
 
 		var receiverPosition *database.PublicPositionsSelect = nil
-		gotInserts, gotUpdates, err := processor.processPositionEvent(event, receiverPosition, senderPosition)
+		gotInserts, gotUpdates, err := processor.processPositionEvent(event, senderPosition, receiverPosition)
 
 		var expectedInserts = []database.PublicPositionsInsert{
 			{
@@ -209,7 +209,7 @@ func TestProcessTransfer(t *testing.T) {
 			EthereumAddress:     UserAddress2,
 			ContractAddress:     VaultAddress,
 		}
-		gotInserts, gotUpdates, err := processor.processPositionEvent(event, receiverPosition, senderPosition)
+		gotInserts, gotUpdates, err := processor.processPositionEvent(event, senderPosition, receiverPosition)
 
 		var expectedInserts = []database.PublicPositionsInsert{
 			{
@@ -278,7 +278,7 @@ func TestProcessWithdraw(t *testing.T) {
 				BlockNumber: 2000,
 			},
 		}
-		gotInserts, gotUpdates, err := processor.processPositionEvent(event, nil, &currentPosition)
+		gotInserts, gotUpdates, err := processor.processPositionEvent(event, &currentPosition, nil)
 
 		var expectedUpdates = []database.PublicPositionsUpdate{
 			{
@@ -327,7 +327,7 @@ func TestProcessWithdraw(t *testing.T) {
 				BlockNumber: 2000,
 			},
 		}
-		gotInserts, gotUpdates, err := processor.processPositionEvent(event, nil, &senderPosition)
+		gotInserts, gotUpdates, err := processor.processPositionEvent(event, &senderPosition, nil)
 
 		var expectedInserts = []database.PublicPositionsInsert(nil)
 		var expectedUpdates = []database.PublicPositionsUpdate{

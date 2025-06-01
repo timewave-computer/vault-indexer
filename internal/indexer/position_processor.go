@@ -117,7 +117,7 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 				}
 
 				// Process the event
-				inserts, updates, err := p.processPositionEvent(event, receiverPosition, senderPosition)
+				inserts, updates, err := p.processPositionEvent(event, senderPosition, receiverPosition)
 				if err != nil {
 					log.Printf("Error processing position event: %v", err)
 					continue
@@ -148,7 +148,7 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 	return nil
 }
 
-func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPosition *database.PublicPositionsSelect, senderPosition *database.PublicPositionsSelect) ([]database.PublicPositionsInsert, []database.PublicPositionsUpdate, error) {
+func (p *PositionProcessor) processPositionEvent(event PositionEvent, senderPos *database.PublicPositionsSelect, receiverPos *database.PublicPositionsSelect) ([]database.PublicPositionsInsert, []database.PublicPositionsUpdate, error) {
 
 	var updates []database.PublicPositionsUpdate
 	var inserts []database.PublicPositionsInsert
@@ -178,7 +178,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPo
 		}
 		if receiverAddress == ZERO_ADDRESS.Hex() {
 			// do nothing
-		} else if receiverPosition == nil {
+		} else if receiverPos == nil {
 			// create a new position
 			inserts = append(inserts, database.PublicPositionsInsert{
 				EthereumAddress:     receiverAddress,
@@ -191,7 +191,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPo
 			})
 		} else {
 			// update receiver position
-			insert, update := updatePosition(receiverPosition, receiverAddress, amount_shares, event.Log.BlockNumber, true)
+			insert, update := updatePosition(receiverPos, receiverAddress, amount_shares, event.Log.BlockNumber, true)
 			if update != nil {
 				updates = append(updates, *update)
 			}
@@ -202,11 +202,11 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPo
 
 		if senderAddress == ZERO_ADDRESS.Hex() {
 			// do nothing
-		} else if senderPosition == nil {
+		} else if senderPos == nil {
 			// do nothing
 		} else {
 			// update sender position
-			insert, update := updatePosition(senderPosition, senderAddress, amount_shares, event.Log.BlockNumber, false)
+			insert, update := updatePosition(senderPos, senderAddress, amount_shares, event.Log.BlockNumber, false)
 			if update != nil {
 				updates = append(updates, *update)
 			}
@@ -228,7 +228,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, receiverPo
 			senderAddress = sender.Hex()
 		}
 
-		insert, update := updatePosition(senderPosition, senderAddress, amount_shares, event.Log.BlockNumber, false)
+		insert, update := updatePosition(senderPos, senderAddress, amount_shares, event.Log.BlockNumber, false)
 		if update != nil {
 			update.NeutronAddress = &neutronAddress
 			updates = append(updates, *update)
