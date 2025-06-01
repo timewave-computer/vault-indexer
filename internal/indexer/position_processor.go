@@ -218,7 +218,10 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, senderPos 
 	case "WithdrawRequested":
 		// update withdrawer position
 		var amount_shares string
-		var neutronAddress = event.EventData["receiver"].(string)
+		neutronAddress, ok := event.EventData["receiver"].(string)
+		if !ok {
+			return nil, nil, fmt.Errorf("invalid receiver address type in WithdrawRequested event")
+		}
 
 		if value, ok := event.EventData["shares"].(*big.Int); ok {
 			amount_shares = value.String()
