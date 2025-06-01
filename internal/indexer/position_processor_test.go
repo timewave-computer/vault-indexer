@@ -97,9 +97,14 @@ func TestProcessDeposit(t *testing.T) {
 
 		var expectedUpdates = []database.PublicPositionsUpdate{
 			{
-				Id:                &receiverPosition.Id,
-				PositionEndHeight: toInt64Ptr(1999),
-				IsTerminated:      toBoolPtr(false),
+				Id:                  &receiverPosition.Id,
+				PositionEndHeight:   toInt64Ptr(1999),
+				IsTerminated:        toBoolPtr(false),
+				ContractAddress:     &receiverPosition.ContractAddress,
+				EthereumAddress:     &receiverPosition.EthereumAddress,
+				AmountShares:        &receiverPosition.AmountShares,
+				PositionStartHeight: &receiverPosition.PositionStartHeight,
+				CreatedAt:           &receiverPosition.CreatedAt,
 			},
 		}
 		var expectedInserts = []database.PublicPositionsInsert{
@@ -162,9 +167,14 @@ func TestProcessTransfer(t *testing.T) {
 
 		var expectedUpdates = []database.PublicPositionsUpdate{
 			{
-				Id:                &senderPosition.Id,
-				PositionEndHeight: toInt64Ptr(1999),
-				IsTerminated:      toBoolPtr(true),
+				Id:                  &senderPosition.Id,
+				PositionEndHeight:   toInt64Ptr(1999),
+				IsTerminated:        toBoolPtr(true),
+				ContractAddress:     &senderPosition.ContractAddress,
+				EthereumAddress:     &senderPosition.EthereumAddress,
+				AmountShares:        &senderPosition.AmountShares,
+				PositionStartHeight: &senderPosition.PositionStartHeight,
+				CreatedAt:           &senderPosition.CreatedAt,
 			},
 		}
 
@@ -174,7 +184,85 @@ func TestProcessTransfer(t *testing.T) {
 
 	})
 
-	t.Run("transfer, existing position", func(t *testing.T) {
+	t.Run("full transfer, existing position", func(t *testing.T) {
+		processor := &PositionProcessor{}
+		var event = PositionEvent{
+			EventName: "Transfer",
+			EventData: map[string]interface{}{
+				"from":  common.HexToAddress(UserAddress1),
+				"to":    common.HexToAddress(UserAddress2),
+				"value": big.NewInt(100),
+			},
+			Log: types.Log{
+				Address:     common.HexToAddress(VaultAddress),
+				BlockNumber: 2000,
+			},
+		}
+		var senderPosition = &database.PublicPositionsSelect{
+			Id:                  1,
+			AmountShares:        "100",
+			PositionEndHeight:   nil,
+			IsTerminated:        false,
+			NeutronAddress:      nil,
+			PositionStartHeight: 1000,
+			EthereumAddress:     UserAddress1,
+			ContractAddress:     VaultAddress,
+		}
+
+		var receiverPosition = &database.PublicPositionsSelect{
+			Id:                  1,
+			AmountShares:        "100",
+			PositionEndHeight:   nil,
+			IsTerminated:        false,
+			NeutronAddress:      nil,
+			PositionStartHeight: 1000,
+			EthereumAddress:     UserAddress2,
+			ContractAddress:     VaultAddress,
+		}
+		gotInserts, gotUpdates, err := processor.processPositionEvent(event, senderPosition, receiverPosition)
+
+		var expectedInserts = []database.PublicPositionsInsert{
+			{
+				EthereumAddress:     UserAddress2,
+				ContractAddress:     VaultAddress,
+				AmountShares:        "200",
+				PositionStartHeight: 2000,
+				PositionEndHeight:   nil,
+				IsTerminated:        nil,
+				NeutronAddress:      nil,
+			},
+		}
+
+		var expectedUpdates = []database.PublicPositionsUpdate{
+			{
+				Id:                  &receiverPosition.Id,
+				PositionEndHeight:   toInt64Ptr(1999),
+				IsTerminated:        toBoolPtr(false),
+				ContractAddress:     &receiverPosition.ContractAddress,
+				EthereumAddress:     &receiverPosition.EthereumAddress,
+				AmountShares:        &receiverPosition.AmountShares,
+				PositionStartHeight: &receiverPosition.PositionStartHeight,
+				CreatedAt:           &receiverPosition.CreatedAt,
+			},
+			{
+				Id:                  &senderPosition.Id,
+				PositionEndHeight:   toInt64Ptr(1999),
+				IsTerminated:        toBoolPtr(true),
+				ContractAddress:     &senderPosition.ContractAddress,
+				EthereumAddress:     &senderPosition.EthereumAddress,
+				AmountShares:        &senderPosition.AmountShares,
+				PositionStartHeight: &senderPosition.PositionStartHeight,
+				CreatedAt:           &senderPosition.CreatedAt,
+			},
+		}
+
+		assert.Equal(t, expectedInserts, gotInserts)
+		assert.Equal(t, expectedUpdates, gotUpdates)
+		assert.NoError(t, err)
+
+	})
+
+	t.Run("partial transfer, existing position", func(t *testing.T) {
 		processor := &PositionProcessor{}
 		var event = PositionEvent{
 			EventName: "Transfer",
@@ -234,14 +322,24 @@ func TestProcessTransfer(t *testing.T) {
 
 		var expectedUpdates = []database.PublicPositionsUpdate{
 			{
-				Id:                &receiverPosition.Id,
-				PositionEndHeight: toInt64Ptr(1999),
-				IsTerminated:      toBoolPtr(false),
+				Id:                  &receiverPosition.Id,
+				PositionEndHeight:   toInt64Ptr(1999),
+				IsTerminated:        toBoolPtr(false),
+				ContractAddress:     &receiverPosition.ContractAddress,
+				EthereumAddress:     &receiverPosition.EthereumAddress,
+				AmountShares:        &receiverPosition.AmountShares,
+				PositionStartHeight: &receiverPosition.PositionStartHeight,
+				CreatedAt:           &receiverPosition.CreatedAt,
 			},
 			{
-				Id:                &senderPosition.Id,
-				PositionEndHeight: toInt64Ptr(1999),
-				IsTerminated:      toBoolPtr(false),
+				Id:                  &senderPosition.Id,
+				PositionEndHeight:   toInt64Ptr(1999),
+				IsTerminated:        toBoolPtr(false),
+				ContractAddress:     &senderPosition.ContractAddress,
+				EthereumAddress:     &senderPosition.EthereumAddress,
+				AmountShares:        &senderPosition.AmountShares,
+				PositionStartHeight: &senderPosition.PositionStartHeight,
+				CreatedAt:           &senderPosition.CreatedAt,
 			},
 		}
 
@@ -282,10 +380,15 @@ func TestProcessWithdraw(t *testing.T) {
 
 		var expectedUpdates = []database.PublicPositionsUpdate{
 			{
-				Id:                &currentPosition.Id,
-				PositionEndHeight: toInt64Ptr(1999),
-				IsTerminated:      toBoolPtr(false),
-				NeutronAddress:    toStringPtr(NeutronAddress1),
+				Id:                  &currentPosition.Id,
+				PositionEndHeight:   toInt64Ptr(1999),
+				IsTerminated:        toBoolPtr(false),
+				NeutronAddress:      toStringPtr(NeutronAddress1),
+				ContractAddress:     &currentPosition.ContractAddress,
+				EthereumAddress:     &currentPosition.EthereumAddress,
+				AmountShares:        &currentPosition.AmountShares,
+				PositionStartHeight: &currentPosition.PositionStartHeight,
+				CreatedAt:           &currentPosition.CreatedAt,
 			},
 		}
 		var expectedInserts = []database.PublicPositionsInsert{
@@ -332,10 +435,15 @@ func TestProcessWithdraw(t *testing.T) {
 		var expectedInserts = []database.PublicPositionsInsert(nil)
 		var expectedUpdates = []database.PublicPositionsUpdate{
 			{
-				Id:                &senderPosition.Id,
-				PositionEndHeight: toInt64Ptr(1999),
-				IsTerminated:      toBoolPtr(true),
-				NeutronAddress:    toStringPtr(NeutronAddress1),
+				Id:                  &senderPosition.Id,
+				PositionEndHeight:   toInt64Ptr(1999),
+				IsTerminated:        toBoolPtr(true),
+				NeutronAddress:      toStringPtr(NeutronAddress1),
+				ContractAddress:     &senderPosition.ContractAddress,
+				EthereumAddress:     &senderPosition.EthereumAddress,
+				AmountShares:        &senderPosition.AmountShares,
+				PositionStartHeight: &senderPosition.PositionStartHeight,
+				CreatedAt:           &senderPosition.CreatedAt,
 			},
 		}
 
@@ -388,9 +496,14 @@ func TestUpdatePosition(t *testing.T) {
 		}
 
 		expectedUpdate := &database.PublicPositionsUpdate{
-			Id:                &currentPosition.Id,
-			PositionEndHeight: toInt64Ptr(1999),
-			IsTerminated:      toBoolPtr(false),
+			Id:                  &currentPosition.Id,
+			PositionEndHeight:   toInt64Ptr(1999),
+			IsTerminated:        toBoolPtr(false),
+			ContractAddress:     &currentPosition.ContractAddress,
+			EthereumAddress:     &currentPosition.EthereumAddress,
+			AmountShares:        &currentPosition.AmountShares,
+			PositionStartHeight: &currentPosition.PositionStartHeight,
+			CreatedAt:           &currentPosition.CreatedAt,
 		}
 
 		assert.Equal(t, expectedInsert, insert)
@@ -412,9 +525,14 @@ func TestUpdatePosition(t *testing.T) {
 		insert, update := updatePosition(currentPosition, UserAddress1, "100", 2000, false)
 
 		expectedUpdate := &database.PublicPositionsUpdate{
-			Id:                &currentPosition.Id,
-			PositionEndHeight: toInt64Ptr(1999),
-			IsTerminated:      toBoolPtr(true),
+			Id:                  &currentPosition.Id,
+			PositionEndHeight:   toInt64Ptr(1999),
+			IsTerminated:        toBoolPtr(true),
+			ContractAddress:     &currentPosition.ContractAddress,
+			EthereumAddress:     &currentPosition.EthereumAddress,
+			AmountShares:        &currentPosition.AmountShares,
+			PositionStartHeight: &currentPosition.PositionStartHeight,
+			CreatedAt:           &currentPosition.CreatedAt,
 		}
 
 		assert.Nil(t, insert)
