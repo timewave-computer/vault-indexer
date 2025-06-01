@@ -14,7 +14,6 @@ type PublicEventsSelect struct {
 type PublicEventsInsert struct {
 	BlockNumber     int64       `json:"block_number"`
 	ContractAddress string      `json:"contract_address"`
-	CreatedAt       *string     `json:"created_at"`
 	EventName       string      `json:"event_name"`
 	LogIndex        int32       `json:"log_index"`
 	RawData         interface{} `json:"raw_data"`
@@ -47,7 +46,6 @@ type PublicPositionsSelect struct {
 type PublicPositionsInsert struct {
 	AmountShares        string  `json:"amount_shares"`
 	ContractAddress     string  `json:"contract_address"`
-	CreatedAt           *string `json:"created_at"`
 	EthereumAddress     string  `json:"ethereum_address"`
 	IsTerminated        *bool   `json:"is_terminated"`
 	NeutronAddress      *string `json:"neutron_address"`

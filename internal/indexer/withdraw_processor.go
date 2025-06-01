@@ -2,10 +2,12 @@ package indexer
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/ethereum/go-ethereum/core/types"
 	supa "github.com/supabase-community/supabase-go"
+	"github.com/timewave/vault-indexer/internal/database"
 )
 
 // WithdrawRequestEvent represents a withdraw request event from the blockchain
@@ -54,7 +56,40 @@ func (p *WithdrawProcessor) Start(events <-chan WithdrawRequestEvent) error {
 
 // processWithdrawRequest processes a single withdraw request event
 func (p *WithdrawProcessor) processWithdrawRequest(event WithdrawRequestEvent) error {
-	// TODO: Implement withdraw request processing logic
+	// Extract required fields from event data
+	withdrawID, ok := event.EventData["id"].(float64)
+	if !ok {
+		return fmt.Errorf("invalid withdrawId in event data")
+	}
+
+	ethereumAddress, ok := event.EventData["owner"].(string)
+	if !ok {
+		return fmt.Errorf("invalid ethereumAddress in event data")
+	}
+
+	amount, ok := event.EventData["shares"].(string)
+	if !ok {
+		return fmt.Errorf("invalid amount in event data")
+	}
+
+	neutronAddress, ok := event.EventData["reciever"].(string)
+	if !ok {
+		return fmt.Errorf("invalid neutronAddress in event data")
+	}
+
+	// Insert withdraw request into database
+	_, _, err := p.db.From("withdraw_requests").Insert(database.PublicWithdrawRequestsInsert{
+		WithdrawId:      int64(withdrawID),
+		ContractAddress: event.Log.Address.Hex(),
+		EthereumAddress: ethereumAddress,
+		Amount:          amount,
+		NeutronAddress:  neutronAddress,
+	}, false, "", "", "").Execute()
+
+	if err != nil {
+		return fmt.Errorf("failed to insert withdraw request: %w", err)
+	}
+
 	return nil
 }
 

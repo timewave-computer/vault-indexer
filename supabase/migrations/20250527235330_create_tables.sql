@@ -31,7 +31,9 @@ CREATE TABLE IF NOT EXISTS withdraw_requests (
     contract_address TEXT NOT NULL,
     ethereum_address TEXT NOT NULL,
     amount TEXT NOT NULL,
-    neutron_address TEXT NOT NULL
+    neutron_address TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+
 );
 
 -- Create indexes for common queries
