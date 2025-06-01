@@ -24,6 +24,16 @@ CREATE TABLE IF NOT EXISTS positions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Create withdraw_requests table
+CREATE TABLE IF NOT EXISTS withdraw_requests (
+    id UUID DEFAULT gen_random_uuid(),
+    withdraw_id BIGINT NOT NULL,
+    contract_address TEXT NOT NULL,
+    ethereum_address TEXT NOT NULL,
+    amount TEXT NOT NULL,
+    neutron_address TEXT NOT NULL
+);
+
 -- Create indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_positions_contract_address ON positions(contract_address);
 CREATE INDEX IF NOT EXISTS idx_positions_ethereum_address ON positions(ethereum_address);

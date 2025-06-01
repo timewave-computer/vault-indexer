@@ -27,7 +27,9 @@ type Indexer struct {
 	ctx               context.Context
 	cancel            context.CancelFunc
 	positionChan      chan PositionEvent
+	withdrawChan      chan WithdrawRequestEvent
 	positionProcessor *PositionProcessor
+	withdrawProcessor *WithdrawProcessor
 	eventProcessor    *EventProcessor
 	wg                sync.WaitGroup
 }
@@ -50,8 +52,10 @@ func New(cfg *config.Config) (*Indexer, error) {
 
 	// Create processors
 	eventProcessor := NewEventProcessor(db, client)
-	positionChan := make(chan PositionEvent, 1000) // Buffer size of 1000 events
+	positionChan := make(chan PositionEvent, 1000)        // Buffer size of 1000 events
+	withdrawChan := make(chan WithdrawRequestEvent, 1000) // Buffer size of 1000 events
 	positionProcessor := NewPositionProcessor(db)
+	withdrawProcessor := NewWithdrawProcessor(db)
 
 	return &Indexer{
 		config:            cfg,
@@ -60,7 +64,9 @@ func New(cfg *config.Config) (*Indexer, error) {
 		ctx:               ctx,
 		cancel:            cancel,
 		positionChan:      positionChan,
+		withdrawChan:      withdrawChan,
 		positionProcessor: positionProcessor,
+		withdrawProcessor: withdrawProcessor,
 		eventProcessor:    eventProcessor,
 	}, nil
 }
@@ -71,6 +77,11 @@ func (i *Indexer) Start() error {
 	// Start position processor
 	if err := i.positionProcessor.Start(i.positionChan); err != nil {
 		return fmt.Errorf("failed to start position processor: %w", err)
+	}
+
+	// Start withdraw processor
+	if err := i.withdrawProcessor.Start(i.withdrawChan); err != nil {
+		return fmt.Errorf("failed to start withdraw processor: %w", err)
 	}
 
 	// Perform health check by getting current block height
@@ -216,8 +227,25 @@ func (i *Indexer) processEvent(vLog types.Log, event abi.Event, contractName str
 		return fmt.Errorf("failed to process event: %w", err)
 	}
 
-	// Send event to position processor if it's a position-related event
-	if event.Name == "WithdrawRequested" || event.Name == "Transfer" {
+	// Send event to appropriate processor based on event type
+	switch event.Name {
+	case "WithdrawRequested":
+		select {
+
+		case i.withdrawChan <- WithdrawRequestEvent{
+			EventName: event.Name,
+			EventData: eventData,
+			Log:       vLog,
+		}:
+		case i.positionChan <- PositionEvent{
+			EventName: event.Name,
+			EventData: eventData,
+			Log:       vLog,
+		}:
+		case <-i.ctx.Done():
+			return fmt.Errorf("context cancelled while sending event to withdraw processor")
+		}
+	case "Transfer":
 		select {
 		case i.positionChan <- PositionEvent{
 			EventName: event.Name,
@@ -228,7 +256,6 @@ func (i *Indexer) processEvent(vLog types.Log, event abi.Event, contractName str
 			return fmt.Errorf("context cancelled while sending event to position processor")
 		}
 	}
-
 	return nil
 }
 
@@ -238,14 +265,16 @@ func (i *Indexer) Stop() error {
 	// signal writers to stop
 	i.cancel()
 
-	// close channel so the reader goroutine can exit gracefully
+	// close channels so the reader goroutines can exit gracefully
 	close(i.positionChan)
+	close(i.withdrawChan)
 
 	// wait until all goroutines finish
 	i.wg.Wait()
 
 	// stop processors
 	i.positionProcessor.Stop()
+	i.withdrawProcessor.Stop()
 	i.eventProcessor.Stop()
 
 	// finally release external resources

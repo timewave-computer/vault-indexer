@@ -38,7 +38,7 @@ type PublicPositionsSelect struct {
 	CreatedAt           string  `json:"created_at"`
 	EthereumAddress     string  `json:"ethereum_address"`
 	Id                  int64   `json:"id"`
-	IsTerminated        bool    `json:"is_terminated"`
+	IsTerminated        *bool   `json:"is_terminated"`
 	NeutronAddress      *string `json:"neutron_address"`
 	PositionEndHeight   *int64  `json:"position_end_height"`
 	PositionStartHeight int64   `json:"position_start_height"`
@@ -47,6 +47,7 @@ type PublicPositionsSelect struct {
 type PublicPositionsInsert struct {
 	AmountShares        string  `json:"amount_shares"`
 	ContractAddress     string  `json:"contract_address"`
+	CreatedAt           *string `json:"created_at"`
 	EthereumAddress     string  `json:"ethereum_address"`
 	IsTerminated        *bool   `json:"is_terminated"`
 	NeutronAddress      *string `json:"neutron_address"`
@@ -64,4 +65,30 @@ type PublicPositionsUpdate struct {
 	NeutronAddress      *string `json:"neutron_address"`
 	PositionEndHeight   *int64  `json:"position_end_height"`
 	PositionStartHeight *int64  `json:"position_start_height"`
+}
+
+type PublicWithdrawRequestsSelect struct {
+	Amount          string  `json:"amount"`
+	ContractAddress string  `json:"contract_address"`
+	EthereumAddress string  `json:"ethereum_address"`
+	Id              *string `json:"id"`
+	NeutronAddress  string  `json:"neutron_address"`
+	WithdrawId      int64   `json:"withdraw_id"`
+}
+
+type PublicWithdrawRequestsInsert struct {
+	Amount          string `json:"amount"`
+	ContractAddress string `json:"contract_address"`
+	EthereumAddress string `json:"ethereum_address"`
+	NeutronAddress  string `json:"neutron_address"`
+	WithdrawId      int64  `json:"withdraw_id"`
+}
+
+type PublicWithdrawRequestsUpdate struct {
+	Amount          *string `json:"amount"`
+	ContractAddress *string `json:"contract_address"`
+	EthereumAddress *string `json:"ethereum_address"`
+	Id              *string `json:"id"`
+	NeutronAddress  *string `json:"neutron_address"`
+	WithdrawId      *int64  `json:"withdraw_id"`
 }
