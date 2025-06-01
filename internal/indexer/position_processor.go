@@ -295,9 +295,16 @@ func computeNewAmountShares(currentPosition *database.PublicPositionsSelect, new
 	}
 
 	currentBigInt := new(big.Int)
-	currentBigInt.SetString(currentPosition.AmountShares, 10)
+	if _, ok := currentBigInt.SetString(currentPosition.AmountShares, 10); !ok {
+		// If we can't parse the current position's amount, return "0" to prevent invalid operations
+		return "0"
+	}
+
 	newBigInt := new(big.Int)
-	newBigInt.SetString(newAmountShares, 10)
+	if _, ok := newBigInt.SetString(newAmountShares, 10); !ok {
+		// If we can't parse the new amount, return the current amount unchanged
+		return currentPosition.AmountShares
+	}
 
 	if isAddition {
 		newBigInt.Add(currentBigInt, newBigInt)
