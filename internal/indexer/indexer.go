@@ -230,21 +230,27 @@ func (i *Indexer) processEvent(vLog types.Log, event abi.Event, contractName str
 	// Send event to appropriate processor based on event type
 	switch event.Name {
 	case "WithdrawRequested":
+		// Send to position channel
 		select {
-
-		case i.withdrawChan <- WithdrawRequestEvent{
-			EventName: event.Name,
-			EventData: eventData,
-			Log:       vLog,
-		}:
 		case i.positionChan <- PositionEvent{
 			EventName: event.Name,
 			EventData: eventData,
 			Log:       vLog,
 		}:
 		case <-i.ctx.Done():
-			return fmt.Errorf("context cancelled while sending event to withdraw processor")
+			return fmt.Errorf("context cancelled while sending withdraw requested event to position processor")
 		}
+		// Send to withdraw channel
+		select {
+		case i.withdrawChan <- WithdrawRequestEvent{
+			EventName: event.Name,
+			EventData: eventData,
+			Log:       vLog,
+		}:
+		case <-i.ctx.Done():
+			return fmt.Errorf("context cancelled while sending withdraw requested event to withdraw processor")
+		}
+
 	case "Transfer":
 		select {
 		case i.positionChan <- PositionEvent{
@@ -253,7 +259,7 @@ func (i *Indexer) processEvent(vLog types.Log, event abi.Event, contractName str
 			Log:       vLog,
 		}:
 		case <-i.ctx.Done():
-			return fmt.Errorf("context cancelled while sending event to position processor")
+			return fmt.Errorf("context cancelled while sending transfer event to position processor")
 		}
 	}
 	return nil

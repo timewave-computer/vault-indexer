@@ -33,7 +33,6 @@ CREATE TABLE IF NOT EXISTS withdraw_requests (
     amount TEXT NOT NULL,
     neutron_address TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-
 );
 
 -- Create indexes for common queries
@@ -44,6 +43,7 @@ CREATE INDEX IF NOT EXISTS idx_events_contract_address ON events(contract_addres
 -- Enable Row Level Security
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE positions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE withdraw_requests ENABLE ROW LEVEL SECURITY;
 
 -- Create policies for anonymous read access
 CREATE POLICY "Allow anonymous read access on events" 
@@ -53,5 +53,11 @@ CREATE POLICY "Allow anonymous read access on events"
 
 CREATE POLICY "Allow anonymous read access on positions" 
     ON positions FOR SELECT 
+    TO anon 
+    USING (true);
+
+
+CREATE POLICY "Allow anonymous read access on withdraw_requests" 
+    ON withdraw_requests FOR SELECT 
     TO anon 
     USING (true);
