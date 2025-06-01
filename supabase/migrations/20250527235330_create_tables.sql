@@ -20,9 +20,7 @@ CREATE TABLE IF NOT EXISTS positions (
     position_start_height BIGINT NOT NULL,
     position_end_height BIGINT,
     amount_shares TEXT NOT NULL,
-    is_terminated BOOLEAN NOT NULL DEFAULT FALSE,
-    is_deposit BOOLEAN NOT NULL DEFAULT FALSE,
-    is_withdraw BOOLEAN NOT NULL DEFAULT FALSE,
+    is_terminated BOOLEAN,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

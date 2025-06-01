@@ -38,9 +38,7 @@ type PublicPositionsSelect struct {
 	CreatedAt           string  `json:"created_at"`
 	EthereumAddress     string  `json:"ethereum_address"`
 	Id                  int64   `json:"id"`
-	IsDeposit           bool    `json:"is_deposit"`
 	IsTerminated        bool    `json:"is_terminated"`
-	IsWithdraw          bool    `json:"is_withdraw"`
 	NeutronAddress      *string `json:"neutron_address"`
 	PositionEndHeight   *int64  `json:"position_end_height"`
 	PositionStartHeight int64   `json:"position_start_height"`
@@ -50,9 +48,7 @@ type PublicPositionsInsert struct {
 	AmountShares        string  `json:"amount_shares"`
 	ContractAddress     string  `json:"contract_address"`
 	EthereumAddress     string  `json:"ethereum_address"`
-	IsDeposit           *bool   `json:"is_deposit"`
 	IsTerminated        *bool   `json:"is_terminated"`
-	IsWithdraw          *bool   `json:"is_withdraw"`
 	NeutronAddress      *string `json:"neutron_address"`
 	PositionEndHeight   *int64  `json:"position_end_height"`
 	PositionStartHeight int64   `json:"position_start_height"`
@@ -64,9 +60,7 @@ type PublicPositionsUpdate struct {
 	CreatedAt           *string `json:"created_at"`
 	EthereumAddress     *string `json:"ethereum_address"`
 	Id                  *int64  `json:"id"`
-	IsDeposit           *bool   `json:"is_deposit"`
 	IsTerminated        *bool   `json:"is_terminated"`
-	IsWithdraw          *bool   `json:"is_withdraw"`
 	NeutronAddress      *string `json:"neutron_address"`
 	PositionEndHeight   *int64  `json:"position_end_height"`
 	PositionStartHeight *int64  `json:"position_start_height"`
