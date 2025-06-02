@@ -16,7 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	supa "github.com/supabase-community/supabase-go"
-	"github.com/timewave/vault-indexer/internal/config"
+	"github.com/timewave/vault-indexer/go-indexer/config"
 )
 
 // Indexer handles blockchain event indexing and position tracking

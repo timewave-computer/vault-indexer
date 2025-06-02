@@ -7,7 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/assert"
-	"github.com/timewave/vault-indexer/internal/database"
+	"github.com/timewave/vault-indexer/go-indexer/database"
 )
 
 const ZeroAddress = "0x0000000000000000000000000000000000000000"

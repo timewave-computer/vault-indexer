@@ -10,7 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	supa "github.com/supabase-community/supabase-go"
-	"github.com/timewave/vault-indexer/internal/database"
+	"github.com/timewave/vault-indexer/go-indexer/database"
 )
 
 // WithdrawRequestEvent represents a withdraw request event from the blockchain

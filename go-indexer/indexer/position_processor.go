@@ -12,7 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/supabase-community/postgrest-go"
 	supa "github.com/supabase-community/supabase-go"
-	"github.com/timewave/vault-indexer/internal/database"
+	"github.com/timewave/vault-indexer/go-indexer/database"
 )
 
 var ZERO_ADDRESS = common.HexToAddress("0x0000000000000000000000000000000000000000")

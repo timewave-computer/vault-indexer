@@ -38,7 +38,7 @@ npx supabase status
 # deploy schema to DB
 npx supabase migration up
 # update DB types
-npx supabase gen types --lang go --local > internal/database/types.go
+npx supabase gen types --lang go --local > go-indexer/database/types.go
 
 # to reset
 npx supabase db reset
@@ -67,5 +67,5 @@ docker network prune
 ```bash
 go test ./...  
 
-go test ./internal/indexer -v
+go test ./go-indexer/indexer -v
 ```

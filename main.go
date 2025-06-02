@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/timewave/vault-indexer/internal/config"
-	"github.com/timewave/vault-indexer/internal/indexer"
+	"github.com/timewave/vault-indexer/go-indexer/config"
+	"github.com/timewave/vault-indexer/go-indexer/indexer"
 )
 
 func main() {
