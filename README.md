@@ -50,17 +50,17 @@ docker network prune
 
 ```
 
-3. set config in `config/config.dev.toml`
+3. set config in `config/indexer-config.dev.toml`
 - add contracts info + abis
 - check supabase local studio (http://127.0.0.1:54323) for anon key and connection string
 
 3. run server
 ```bash
 # For development (default)
-./start.sh
+./start-indexer.sh
 
 # For production
-./start.sh prod
+./start-indexer.sh prod
 ```
 
 ## Testing
