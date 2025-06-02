@@ -20,7 +20,8 @@ CREATE POLICY "Allow anonymous read access on events"
 
 -- POSITIONS
 CREATE TABLE IF NOT EXISTS positions (
-    id BIGSERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    position_index_id BIGINT NOT NULL,
     contract_address TEXT NOT NULL,
     ethereum_address TEXT NOT NULL,
     neutron_address TEXT,

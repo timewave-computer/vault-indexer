@@ -36,10 +36,11 @@ type PublicPositionsSelect struct {
 	ContractAddress     string  `json:"contract_address"`
 	CreatedAt           string  `json:"created_at"`
 	EthereumAddress     string  `json:"ethereum_address"`
-	Id                  int64   `json:"id"`
+	Id                  string  `json:"id"`
 	IsTerminated        *bool   `json:"is_terminated"`
 	NeutronAddress      *string `json:"neutron_address"`
 	PositionEndHeight   *int64  `json:"position_end_height"`
+	PositionIndexId     int64   `json:"position_index_id"`
 	PositionStartHeight int64   `json:"position_start_height"`
 }
 
@@ -50,6 +51,7 @@ type PublicPositionsInsert struct {
 	IsTerminated        *bool   `json:"is_terminated"`
 	NeutronAddress      *string `json:"neutron_address"`
 	PositionEndHeight   *int64  `json:"position_end_height"`
+	PositionIndexId     int64   `json:"position_index_id"`
 	PositionStartHeight int64   `json:"position_start_height"`
 }
 
@@ -58,20 +60,22 @@ type PublicPositionsUpdate struct {
 	ContractAddress     *string `json:"contract_address"`
 	CreatedAt           *string `json:"created_at"`
 	EthereumAddress     *string `json:"ethereum_address"`
-	Id                  *int64  `json:"id"`
+	Id                  *string `json:"id"`
 	IsTerminated        *bool   `json:"is_terminated"`
 	NeutronAddress      *string `json:"neutron_address"`
 	PositionEndHeight   *int64  `json:"position_end_height"`
+	PositionIndexId     *int64  `json:"position_index_id"`
 	PositionStartHeight *int64  `json:"position_start_height"`
 }
 
 type PublicWithdrawRequestsSelect struct {
-	Amount          string  `json:"amount"`
-	ContractAddress string  `json:"contract_address"`
-	EthereumAddress string  `json:"ethereum_address"`
-	Id              *string `json:"id"`
-	NeutronAddress  string  `json:"neutron_address"`
-	WithdrawId      int64   `json:"withdraw_id"`
+	Amount          string `json:"amount"`
+	ContractAddress string `json:"contract_address"`
+	CreatedAt       string `json:"created_at"`
+	EthereumAddress string `json:"ethereum_address"`
+	Id              string `json:"id"`
+	NeutronAddress  string `json:"neutron_address"`
+	WithdrawId      int64  `json:"withdraw_id"`
 }
 
 type PublicWithdrawRequestsInsert struct {
@@ -85,6 +89,7 @@ type PublicWithdrawRequestsInsert struct {
 type PublicWithdrawRequestsUpdate struct {
 	Amount          *string `json:"amount"`
 	ContractAddress *string `json:"contract_address"`
+	CreatedAt       *string `json:"created_at"`
 	EthereumAddress *string `json:"ethereum_address"`
 	Id              *string `json:"id"`
 	NeutronAddress  *string `json:"neutron_address"`
