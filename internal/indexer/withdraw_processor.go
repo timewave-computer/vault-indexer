@@ -83,15 +83,13 @@ func (p *WithdrawProcessor) processWithdrawRequest(event WithdrawRequestEvent) e
 
 	if addr, ok := event.EventData["owner"].(common.Address); ok {
 		ethereumAddress = addr.Hex()
-	}
-	if !ok {
+	} else {
 		return fmt.Errorf("invalid ethereumAddress in event data")
 	}
 
 	if value, ok := event.EventData["shares"].(*big.Int); ok {
 		amount = value.String()
-	}
-	if !ok {
+	} else {
 		return fmt.Errorf("invalid amount in event data")
 	}
 
@@ -119,4 +117,5 @@ func (p *WithdrawProcessor) processWithdrawRequest(event WithdrawRequestEvent) e
 // Stop stops the withdraw processor
 func (p *WithdrawProcessor) Stop() {
 	p.cancel()
+	p.wg.Wait()
 }
