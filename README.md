@@ -23,34 +23,48 @@
 - supabase installed globally (`npm install supabase --save-dev`)
 - docker
 
-## Developing
+## Database
+### Start locally
+start docker
+```bash
+npx supabase start
+npx supabase status
+```
+
+### Deploy schema change 
+```bash
+npx supabase migration up
+```
+
+### Generate types
+```bash
+# for indexer
+npx supabase gen types --lang go --local > go-indexer/database/types.go
+
+# for api server
+npx supabase gen types --lang typescript --local > src/app/types.ts
+
+```
+
+### Clear database and apply migration
+```bash
+npx supabase db reset
+## remember to re-generate types
+```
+
+### Restart system
+```bash
+npx supabase stop
+docker network prune
+```
+
+## Indexer
 1. install dependencies
 ```bash
 go mod tidy
 ```
 
-2. start local DB
-start docker
-```bash
-npx supabase start
-npx supabase status
-
-# deploy schema to DB
-npx supabase migration up
-# update DB types
-npx supabase gen types --lang go --local > go-indexer/database/types.go
-
-# to reset
-npx supabase db reset
-## remember to re-generate types
-
-# reset system
-npx supabase stop
-docker network prune
-
-```
-
-3. set config in `config/indexer-config.dev.toml`
+2. set config in `indexer-config/config.dev.toml`
 - add contracts info + abis
 - check supabase local studio (http://127.0.0.1:54323) for anon key and connection string
 
@@ -69,3 +83,23 @@ go test ./...
 
 go test ./go-indexer/indexer -v
 ```
+
+# API server
+Simple nextjs app to provide an API for the indexer database
+
+## Prereqs
+- node.js
+- npm
+
+## Start API server
+1. install dependencies
+```bash
+npm install
+```
+
+2. start server
+```bash
+npm run dev
+```
+Visit the api at `localhost:3000/v1`
+
