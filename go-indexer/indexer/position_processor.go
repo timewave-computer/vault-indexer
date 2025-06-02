@@ -130,14 +130,15 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 				if err == nil {
 					if len(data) == 0 {
 						maxPositionIndexId = 0
-						continue
+
+					} else {
+						var posId database.PublicPositionsSelect
+						if err := json.Unmarshal(data, &posId); err != nil {
+							log.Printf("Error unmarshaling max position index id: %v", err)
+							continue
+						}
+						maxPositionIndexId = posId.PositionIndexId
 					}
-					var posId database.PublicPositionsSelect
-					if err := json.Unmarshal(data, &posId); err != nil {
-						log.Printf("Error unmarshaling max position index id: %v", err)
-						continue
-					}
-					maxPositionIndexId = posId.PositionIndexId
 				}
 
 				// Process the event
