@@ -56,16 +56,10 @@ type PublicPositionsInsert struct {
 }
 
 type PublicPositionsUpdate struct {
-	AmountShares        *string `json:"amount_shares"`
-	ContractAddress     *string `json:"contract_address"`
-	CreatedAt           *string `json:"created_at"`
-	EthereumAddress     *string `json:"ethereum_address"`
-	Id                  *string `json:"id"`
-	IsTerminated        *bool   `json:"is_terminated"`
-	NeutronAddress      *string `json:"neutron_address"`
-	PositionEndHeight   *int64  `json:"position_end_height"`
-	PositionIndexId     *int64  `json:"position_index_id"`
-	PositionStartHeight *int64  `json:"position_start_height"`
+	Id                string  `json:"id"`
+	IsTerminated      *bool   `json:"is_terminated"`
+	NeutronAddress    *string `json:"neutron_address"`
+	PositionEndHeight *int64  `json:"position_end_height"`
 }
 
 type PublicWithdrawRequestsSelect struct {
