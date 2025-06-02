@@ -19,11 +19,13 @@
 
 
 ## Prereqs
+Indexer:
 - go
 - supabase installed globally (`npm install supabase --save-dev`)
 - docker
 
-## Developing
+
+## Start Indexer
 1. install dependencies
 ```bash
 go mod tidy
@@ -68,4 +70,23 @@ docker network prune
 go test ./...  
 
 go test ./go-indexer/indexer -v
+```
+
+# API server
+Simple nextjs app to provide an API for the indexer database
+
+## Prereqs
+
+- node.js
+- npm
+
+## Start API server
+1. install dependencies
+```bash
+npm install
+```
+
+2. start server
+```bash
+npm run dev
 ```
