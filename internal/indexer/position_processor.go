@@ -43,6 +43,7 @@ func NewPositionProcessor(db *supa.Client) *PositionProcessor {
 }
 
 func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
+	log.Println("Starting position processor...")
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()

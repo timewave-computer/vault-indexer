@@ -1,4 +1,4 @@
--- Events table to store raw blockchain events
+-- EVENTS
 CREATE TABLE IF NOT EXISTS events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     contract_address TEXT NOT NULL,
@@ -11,7 +11,14 @@ CREATE TABLE IF NOT EXISTS events (
     UNIQUE(transaction_hash, log_index)
 );
 
--- Create positions table
+CREATE INDEX IF NOT EXISTS idx_events_contract_address ON events(contract_address);
+ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow anonymous read access on events" 
+    ON events FOR SELECT 
+    TO anon 
+    USING (true);
+
+-- POSITIONS
 CREATE TABLE IF NOT EXISTS positions (
     id BIGSERIAL PRIMARY KEY,
     contract_address TEXT NOT NULL,
@@ -23,23 +30,36 @@ CREATE TABLE IF NOT EXISTS positions (
     is_terminated BOOLEAN,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
--- Create indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_positions_contract_address ON positions(contract_address);
 CREATE INDEX IF NOT EXISTS idx_positions_ethereum_address ON positions(ethereum_address);
-CREATE INDEX IF NOT EXISTS idx_events_contract_address ON events(contract_address);
-
--- Enable Row Level Security
-ALTER TABLE events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE positions ENABLE ROW LEVEL SECURITY;
-
--- Create policies for anonymous read access
-CREATE POLICY "Allow anonymous read access on events" 
-    ON events FOR SELECT 
-    TO anon 
-    USING (true);
-
 CREATE POLICY "Allow anonymous read access on positions" 
     ON positions FOR SELECT 
     TO anon 
     USING (true);
+
+-- WITHDRAW REQUESTS
+CREATE TABLE IF NOT EXISTS withdraw_requests (
+     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    withdraw_id BIGINT NOT NULL,
+    contract_address TEXT NOT NULL,
+    ethereum_address TEXT NOT NULL,
+    amount TEXT NOT NULL,
+    neutron_address TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_withdraw_requests_contract_address ON withdraw_requests(contract_address);
+CREATE INDEX IF NOT EXISTS idx_withdraw_requests_ethereum_address ON withdraw_requests(ethereum_address);
+CREATE INDEX IF NOT EXISTS idx_withdraw_requests_withdraw_id ON withdraw_requests(withdraw_id);
+
+
+
+
+
+
+CREATE POLICY "Allow anonymous read access on withdraw_requests" 
+    ON withdraw_requests FOR SELECT 
+    TO anon 
+    USING (true);
+
+ALTER TABLE withdraw_requests ENABLE ROW LEVEL SECURITY;
