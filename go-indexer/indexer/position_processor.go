@@ -126,9 +126,12 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 					Single().
 					Execute()
 
-				// if no rows found, set maxPositionIndexId to 0
-				if err == nil {
+				if err != nil {
+					log.Printf("Error getting max position index id: %v", err)
+					continue
+				} else {
 					if len(data) == 0 {
+						// if no rows found, set maxPositionIndexId to 0
 						maxPositionIndexId = 0
 
 					} else {
