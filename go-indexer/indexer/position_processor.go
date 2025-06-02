@@ -127,21 +127,22 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 					Execute()
 
 				if err != nil {
-					log.Printf("Error getting max position index id: %v", err)
-					continue
-				} else {
-					if len(data) == 0 {
-						// if no rows found, set maxPositionIndexId to 0
+					// Check if this is the "no rows returned" error
+					if err.Error() == "(PGRST116) JSON object requested, multiple (or no) rows returned" {
 						maxPositionIndexId = 0
-
 					} else {
-						var posId database.PublicPositionsSelect
-						if err := json.Unmarshal(data, &posId); err != nil {
-							log.Printf("Error unmarshaling max position index id: %v", err)
-							continue
-						}
-						maxPositionIndexId = posId.PositionIndexId
+						log.Printf("Error getting max position index id: %v", err)
+						continue
 					}
+				} else {
+
+					var posId database.PublicPositionsSelect
+					if err := json.Unmarshal(data, &posId); err != nil {
+						log.Printf("Error unmarshaling max position index id: %v", err)
+						continue
+					}
+					maxPositionIndexId = posId.PositionIndexId
+
 				}
 
 				// Process the event
@@ -247,6 +248,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, senderPos 
 				inserts = append(inserts, *insert)
 			}
 		}
+		log.Printf("%v Transfer: from: %v, to: %v, value: %v", event.Log.Address.Hex(), senderAddress, receiverAddress, amount_shares)
 
 	case "WithdrawRequested":
 		// update withdrawer position
@@ -271,12 +273,12 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, senderPos 
 		if insert != nil {
 			inserts = append(inserts, *insert)
 		}
+		log.Printf("%v WithdrawRequested: from: %v, to: %v, value: %v", event.Log.Address.Hex(), senderAddress, neutronAddress, amount_shares)
 
 	default:
 		// exit early
 		return inserts, updates, nil
 	}
-
 	return inserts, updates, nil
 }
 
