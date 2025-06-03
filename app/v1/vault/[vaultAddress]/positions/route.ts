@@ -53,13 +53,4 @@ export async function GET(request: NextRequest,
     const error = e as Error
     return Response.json({ error: error.message }, { status: 400 })
   }
-
-
-
-
-
-
-
-
-
 }
