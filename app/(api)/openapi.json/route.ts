@@ -1,4 +1,4 @@
-import { getApiDocs } from "@/app/lib/swagger";
+import { getApiDocs } from "@/app/lib";
 
 
 export const GET = async () => {
