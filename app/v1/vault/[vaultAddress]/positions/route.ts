@@ -4,16 +4,78 @@ import { type NextRequest } from 'next/server'
 import { isAddress } from 'ethers'
 import { paginationSchema } from "@/app/types"
 
+/**
+ * @swagger
+ * /v1/vault/{vaultAddress}/positions:
+ *   get:
+ *     summary: Get positions for a specific vault
+ *     description: Retrieves positions for a given vault address with optional filtering and pagination
+ *     parameters:
+ *       - in: path
+ *         name: vaultAddress
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Ethereum address of the vault
+ *       - in: query
+ *         name: ethereum_address
+ *         schema:
+ *           type: string
+ *         description: Optional filter by ethereum address
+ *       - in: query
+ *         name: from
+ *         schema:
+ *           type: integer
+ *         description: Starting position index for pagination
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         description: Number of records to return
+ *       - in: query
+ *         name: order
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *         description: Sort order
+ *     responses:
+ *       200:
+ *         description: List of positions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       amount_shares:
+ *                         type: string
+ *                       position_start_height:
+ *                         type: integer
+ *                       position_end_height:
+ *                         type: integer
+ *                       ethereum_address:
+ *                         type: string
+ *                       created_at:
+ *                         type: string
+ *       400:
+ *         description: Invalid request parameters
+ */
 
 const querySchema = paginationSchema.extend({
   ethereum_address: z.string().optional(),
 })
 
 export async function GET(request: NextRequest,
-  { params: { vaultAddress } }: { params: { vaultAddress: string } }
+  { params }: { params: Promise<{ vaultAddress: string }> }
 ) {
   try {
-
+    const { vaultAddress } = await params
 
     if (!isAddress(vaultAddress)) {
       throw new Error('Invalid vault address')

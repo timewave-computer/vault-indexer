@@ -1,15 +1,75 @@
 import supabase from "@/app/supabase"
-import { z } from 'zod'
 import { type NextRequest } from 'next/server'
 import { isAddress } from 'ethers'
 import { paginationSchema } from "@/app/types"
 
+/**
+ * @swagger
+ * /v1/vault/{vaultAddress}/withdrawRequest/{ethereumAddress}:
+ *   get:
+ *     summary: Get withdraw requests for a specific address in a vault
+ *     description: Retrieves withdraw requests for a given ethereum address in a specific vault
+ *     parameters:
+ *       - in: path
+ *         name: vaultAddress
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Ethereum address of the vault
+ *       - in: path
+ *         name: ethereumAddress
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Ethereum address to get withdraw requests for
+ *       - in: query
+ *         name: from
+ *         schema:
+ *           type: integer
+ *         description: Starting withdraw request ID for pagination
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         description: Number of records to return
+ *       - in: query
+ *         name: order
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *         description: Sort order
+ *     responses:
+ *       200:
+ *         description: List of withdraw requests
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       amount:
+ *                         type: string
+ *                       created_at:
+ *                         type: string
+ *                       neutron_address:
+ *                         type: string
+ *       400:
+ *         description: Invalid request parameters
+ */
 
 const querySchema = paginationSchema
 
 export async function GET(request: NextRequest,
-  { params: { vaultAddress, ethereumAddress } }: { params: { vaultAddress: string, ethereumAddress: string } }
+  { params }: { params: Promise<{ vaultAddress: string, ethereumAddress: string }> }
 ) {
+
+  const { vaultAddress, ethereumAddress } = await params
   try {
 
     if (!isAddress(vaultAddress)) {
