@@ -73,11 +73,10 @@ export type Database = {
           contract_address: string
           created_at: string
           ethereum_address: string
-          id: string
+          id: number
           is_terminated: boolean | null
           neutron_address: string | null
           position_end_height: number | null
-          position_index_id: number
           position_start_height: number
         }
         Insert: {
@@ -85,11 +84,10 @@ export type Database = {
           contract_address: string
           created_at?: string
           ethereum_address: string
-          id?: string
+          id?: number
           is_terminated?: boolean | null
           neutron_address?: string | null
           position_end_height?: number | null
-          position_index_id: number
           position_start_height: number
         }
         Update: {
@@ -97,11 +95,10 @@ export type Database = {
           contract_address?: string
           created_at?: string
           ethereum_address?: string
-          id?: string
+          id?: number
           is_terminated?: boolean | null
           neutron_address?: string | null
           position_end_height?: number | null
-          position_index_id?: number
           position_start_height?: number
         }
         Relationships: []
