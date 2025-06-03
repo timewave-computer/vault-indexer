@@ -5,9 +5,7 @@ import { isAddress } from 'ethers'
 import { paginationSchema } from "@/app/types"
 
 
-const querySchema = paginationSchema.extend({
-  ethereum_address: z.string().optional(),
-})
+const querySchema = paginationSchema
 
 export async function GET(request: NextRequest,
   { params }: { params: Promise<{ vaultAddress: string, ethereumAddress: string }> }
@@ -25,8 +23,11 @@ export async function GET(request: NextRequest,
     const searchParams = request.nextUrl.searchParams
     const { from, limit, order } = querySchema.parse(Object.fromEntries(searchParams.entries()))
 
-
-    const query = supabase.from('withdraw_requests').select(`*
+    const query = supabase.from('withdraw_requests').select(`
+      id:withdraw_id,
+      amount,
+      created_at,
+      neutron_address
   `).eq('contract_address', vaultAddress)
     .eq('ethereum_address', ethereumAddress)
     .limit(Number(limit))

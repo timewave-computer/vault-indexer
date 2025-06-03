@@ -128,6 +128,7 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 					Execute()
 
 				if err != nil {
+
 					// Check if this is the "no rows returned" error
 					var errStr = err.Error()
 					if strings.Contains(errStr, "no rows") || strings.Contains(errStr, "PGRST116") {
