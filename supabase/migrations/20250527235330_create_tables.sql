@@ -20,7 +20,8 @@ CREATE POLICY "Allow anonymous read access on events"
 
 -- POSITIONS
 CREATE TABLE IF NOT EXISTS positions (
-    id BIGSERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    position_index_id BIGINT NOT NULL,
     contract_address TEXT NOT NULL,
     ethereum_address TEXT NOT NULL,
     neutron_address TEXT,
@@ -32,7 +33,12 @@ CREATE TABLE IF NOT EXISTS positions (
 );
 CREATE INDEX IF NOT EXISTS idx_positions_contract_address ON positions(contract_address);
 CREATE INDEX IF NOT EXISTS idx_positions_ethereum_address ON positions(ethereum_address);
+
+-- Enforce per-vault uniqueness of the running index
+CREATE UNIQUE INDEX IF NOT EXISTS idx_positions_contract_address_position_index_id
+  ON positions(contract_address, position_index_id);
 ALTER TABLE positions ENABLE ROW LEVEL SECURITY;
+
 CREATE POLICY "Allow anonymous read access on positions" 
     ON positions FOR SELECT 
     TO anon 
@@ -40,7 +46,7 @@ CREATE POLICY "Allow anonymous read access on positions"
 
 -- WITHDRAW REQUESTS
 CREATE TABLE IF NOT EXISTS withdraw_requests (
-     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     withdraw_id BIGINT NOT NULL,
     contract_address TEXT NOT NULL,
     ethereum_address TEXT NOT NULL,
