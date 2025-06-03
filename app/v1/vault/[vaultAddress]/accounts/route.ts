@@ -7,10 +7,9 @@ import { paginationSchema } from "@/app/types"
 const querySchema = paginationSchema
 
 export async function GET(request: NextRequest,
-  { params }: { params: Promise<{ vaultAddress: string }> }
+  { params: { vaultAddress } }: { params: { vaultAddress: string } }
 ) {
   try {
-    const { vaultAddress } = await params
 
     if (!isAddress(vaultAddress)) {
       throw new Error('Invalid ethereum address')

@@ -5,7 +5,7 @@ The project has 3 parts
     - connects to an ethereum node
     - reads events for specific contracts (configured in `indexer-config`)
     - write events to DB
-    - trasnforms events into data required for the app (accounts, positions, etc)
+    - transforms events into data required for the app (accounts, positions, etc)
 - Next JS API app in `app` - easy way to host the API. reads from the same schema. Deployed on vercel.
 
 ## Database

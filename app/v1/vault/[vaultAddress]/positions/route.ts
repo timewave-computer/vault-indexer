@@ -10,13 +10,13 @@ const querySchema = paginationSchema.extend({
 })
 
 export async function GET(request: NextRequest,
-  { params }: { params: Promise<{ vaultAddress: string }> }
+  { params: { vaultAddress } }: { params: { vaultAddress: string } }
 ) {
   try {
-    const { vaultAddress } = await params
+
 
     if (!isAddress(vaultAddress)) {
-      throw new Error('Invalid ethereum address')
+      throw new Error('Invalid vault address')
     }
     const searchParams = request.nextUrl.searchParams
     const { ethereum_address, from, limit, order } = querySchema.parse(Object.fromEntries(searchParams.entries()))
@@ -31,7 +31,6 @@ export async function GET(request: NextRequest,
   `).eq('contract_address', vaultAddress)
     .limit(Number(limit))
 
-    .order('position_index_id', { ascending: order === 'asc' })
 
     if (ethereum_address) {
       query.eq('ethereum_address', ethereum_address)
