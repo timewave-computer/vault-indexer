@@ -73,7 +73,7 @@ export async function GET(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { from, limit, order } = querySchema.parse(Object.fromEntries(searchParams.entries()))
 
-    return Response.json({ error: "Not implemented" }, { status: 500 })
+    return Response.json({ error: "API still in development" }, { status: 500 })
 
 
   } catch (e) {
