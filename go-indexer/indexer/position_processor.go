@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"strings"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -128,7 +129,8 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 
 				if err != nil {
 					// Check if this is the "no rows returned" error
-					if err.Error() == "(PGRST116) JSON object requested, multiple (or no) rows returned" {
+					var errStr = err.Error()
+					if strings.Contains(errStr, "no rows") || strings.Contains(errStr, "PGRST116") {
 						maxPositionIndexId = 0
 					} else {
 						log.Printf("Error getting max position index id: %v", err)
