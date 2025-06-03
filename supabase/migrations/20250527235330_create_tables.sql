@@ -60,7 +60,6 @@ CREATE INDEX IF NOT EXISTS idx_withdraw_requests_withdraw_id ON withdraw_request
 
 
 
-
 CREATE POLICY "Allow anonymous read access on withdraw_requests" 
     ON withdraw_requests FOR SELECT 
     TO anon 
