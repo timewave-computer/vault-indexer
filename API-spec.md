@@ -43,5 +43,43 @@ With query args:
 - Pagination is supported using 'from' and 'limit' parameters
 - Filtering by ethereum_address is optional
 
+# Withdraw Requests
+`/v1/vault/vaultAddress/withdrawRequest/ethereumAddress`
+
+## Optional query params
+```json
+{
+  // for pagination
+  "from": "from withdraw_id",
+  "limit": "number of records",
+  "order": "asc | desc"
+}
+```
+
+## Response Type
+```typescript
+{
+  data: Array<{
+    id: number;              // withdraw_id
+    amount: number;          // amount of the withdraw request
+    created_at: string;      // timestamp of withdraw request creation
+    neutron_address: string; // neutron address associated with the request
+  }>
+}
+```
+
+## Error Response
+```typescript
+{
+  error: string;  // Error message
+}
+```
+
+## Notes
+- Returns HTTP 400 for invalid requests (e.g., invalid vault address or ethereum address)
+- Results are ordered by withdraw_id
+- Pagination is supported using 'from' and 'limit' parameters
+- Both vaultAddress and ethereumAddress are required path parameters
+
 
 
