@@ -1,29 +1,19 @@
-# Indexer
-
-## Architecture
-- Main indexer process starts, loads config for what to index and what to connect to, connects to the eth client and database, starts up channels for data transformation after ingestion
-- Begins event processing
-   1. for each contract and event in the config, process historical events. for each event, save in DB and send to post processing (positions)
-   2. for each contract and event in the config, subscribe to event. as they come in, send to processing
-- Passes data to post-process after event ingestion
-    1. from positions channel: read and process positions
-
-
-## Requirements
-1. connecting to an evm node in go
-2. consuming a config file for what to index (with a sample config file)
-3. loading in all events that already occured
-4. listening to new events once log is processed
-5. writing events to postgres
-6. postgres transforms events table to Positions table as the Events table gets written
-
-
-## Prereqs
-- go
-- supabase installed globally (`npm install supabase --save-dev`)
-- docker
+# Indexer + API app
+The project has 3 parts
+- Postgres DB - schema defined in `supabase` hosted by supabase, uses some of their tools
+- Indexer "ETL" go code in `go-indexer` - long-running server that
+    - connects to an ethereum node
+    - reads events for specific contracts (configured in `indexer-config`)
+    - write events to DB
+    - transforms events into data required for the app (accounts, positions, etc)
+- Next JS API app in `app` - easy way to host the API. reads from the same schema. Deployed on vercel.
 
 ## Database
+### Prerequisites
+- npm
+- docker
+- supabase installed globally (`npm install supabase --save-dev`)
+
 ### Start locally
 start docker
 ```bash
@@ -42,7 +32,7 @@ npx supabase migration up
 npx supabase gen types --lang go --local > go-indexer/database/types.go
 
 # for api server
-npx supabase gen types --lang typescript --local > src/app/types.ts
+npx supabase gen types --lang typescript --local > app/types/database.ts
 
 ```
 
@@ -59,6 +49,12 @@ docker network prune
 ```
 
 ## Indexer
+
+### Prereqs
+- go
+- docker
+
+### Local development
 1. install dependencies
 ```bash
 go mod tidy
