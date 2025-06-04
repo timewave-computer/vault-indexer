@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS positions (
     position_index_id BIGINT NOT NULL,
     contract_address TEXT NOT NULL,
     owner_address TEXT NOT NULL,
-    withdraw_reciever_address TEXT,
+    withdraw_receiver_address TEXT,
     position_start_height BIGINT NOT NULL,
     position_end_height BIGINT,
     amount_shares TEXT NOT NULL,

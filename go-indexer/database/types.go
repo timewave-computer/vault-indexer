@@ -41,7 +41,7 @@ type PublicPositionsSelect struct {
 	PositionEndHeight       *int64  `json:"position_end_height"`
 	PositionIndexId         int64   `json:"position_index_id"`
 	PositionStartHeight     int64   `json:"position_start_height"`
-	WithdrawRecieverAddress *string `json:"withdraw_reciever_address"`
+	WithdrawReceiverAddress *string `json:"withdraw_receiver_address"`
 }
 
 type PublicPositionsInsert struct {
@@ -52,20 +52,14 @@ type PublicPositionsInsert struct {
 	PositionEndHeight       *int64  `json:"position_end_height"`
 	PositionIndexId         int64   `json:"position_index_id"`
 	PositionStartHeight     int64   `json:"position_start_height"`
-	WithdrawRecieverAddress *string `json:"withdraw_reciever_address"`
+	WithdrawReceiverAddress *string `json:"withdraw_receiver_address"`
 }
 
 type PublicPositionsUpdate struct {
-	AmountShares            *string `json:"amount_shares"`
-	ContractAddress         *string `json:"contract_address"`
-	CreatedAt               *string `json:"created_at"`
-	Id                      *string `json:"id"`
+	Id                      string  `json:"id"`
 	IsTerminated            *bool   `json:"is_terminated"`
-	OwnerAddress            *string `json:"owner_address"`
 	PositionEndHeight       *int64  `json:"position_end_height"`
-	PositionIndexId         *int64  `json:"position_index_id"`
-	PositionStartHeight     *int64  `json:"position_start_height"`
-	WithdrawRecieverAddress *string `json:"withdraw_reciever_address"`
+	WithdrawReceiverAddress *string `json:"withdraw_receiver_address"`
 }
 
 type PublicWithdrawRequestsSelect struct {

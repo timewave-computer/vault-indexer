@@ -19,7 +19,7 @@ func TestProcessWithdrawRequest(t *testing.T) {
 			AmountShares:            "100",
 			PositionEndHeight:       nil,
 			IsTerminated:            toBoolPtr(false),
-			WithdrawRecieverAddress: nil,
+			WithdrawReceiverAddress: nil,
 			PositionStartHeight:     1000,
 			OwnerAddress:            UserAddress1,
 			ContractAddress:         VaultAddress,
@@ -43,7 +43,7 @@ func TestProcessWithdrawRequest(t *testing.T) {
 				Id:                      currentPosition.Id,
 				PositionEndHeight:       toInt64Ptr(1999),
 				IsTerminated:            toBoolPtr(false),
-				WithdrawRecieverAddress: toStringPtr(NeutronAddress1),
+				WithdrawReceiverAddress: toStringPtr(NeutronAddress1),
 			},
 		}
 		var expectedInserts = []database.PublicPositionsInsert{
@@ -69,7 +69,7 @@ func TestProcessWithdrawRequest(t *testing.T) {
 			AmountShares:            "100",
 			PositionEndHeight:       nil,
 			IsTerminated:            toBoolPtr(false),
-			WithdrawRecieverAddress: nil,
+			WithdrawReceiverAddress: nil,
 			PositionStartHeight:     1000,
 			OwnerAddress:            UserAddress1,
 			ContractAddress:         VaultAddress,
@@ -94,7 +94,7 @@ func TestProcessWithdrawRequest(t *testing.T) {
 				Id:                      senderPosition.Id,
 				PositionEndHeight:       toInt64Ptr(1999),
 				IsTerminated:            toBoolPtr(true),
-				WithdrawRecieverAddress: toStringPtr(NeutronAddress1),
+				WithdrawReceiverAddress: toStringPtr(NeutronAddress1),
 			},
 		}
 

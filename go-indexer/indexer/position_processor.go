@@ -223,7 +223,7 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, senderPos 
 				PositionStartHeight:     int64(event.Log.BlockNumber),
 				PositionEndHeight:       nil,
 				IsTerminated:            nil, // this is only incrementing, can't be terminated
-				WithdrawRecieverAddress: nil,
+				WithdrawReceiverAddress: nil,
 			})
 
 		} else {
@@ -323,7 +323,7 @@ func updatePosition(
 		// new values
 		IsTerminated:            &isTerminated,
 		PositionEndHeight:       &endHeight,
-		WithdrawRecieverAddress: neutronAddress,
+		WithdrawReceiverAddress: neutronAddress,
 	}
 
 	return insert, update

@@ -105,7 +105,7 @@
                                                         "type": "string",
                                                         "description": "Ethereum address of the position owner"
                                                     },
-                                                    "withdraw_reciever_address": {
+                                                    "withdraw_receiver_address": {
                                                         "type": "string",
                                                         "description": "Ethereum address that will receive withdrawn funds"
                                                     },

@@ -66,7 +66,7 @@ import { paginationSchema } from "@/app/types"
  *                       owner_address:
  *                         type: string
  *                         description: Ethereum address of the position owner
- *                       withdraw_reciever_address:
+ *                       withdraw_receiver_address:
  *                         type: string
  *                         description: Ethereum address that will receive withdrawn funds
  *                       created_at:
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest,
       position_start_height,
       position_end_height,
       owner_address,
-      withdraw_reciever_address,
+      withdraw_receiver_address,
       created_at
   `).eq('contract_address', vaultAddress)
     .limit(Number(limit))

@@ -78,7 +78,7 @@ export type Database = {
           position_end_height: number | null
           position_index_id: number
           position_start_height: number
-          withdraw_reciever_address: string | null
+          withdraw_receiver_address: string | null
         }
         Insert: {
           amount_shares: string
@@ -90,7 +90,7 @@ export type Database = {
           position_end_height?: number | null
           position_index_id: number
           position_start_height: number
-          withdraw_reciever_address?: string | null
+          withdraw_receiver_address?: string | null
         }
         Update: {
           amount_shares?: string
@@ -102,7 +102,7 @@ export type Database = {
           position_end_height?: number | null
           position_index_id?: number
           position_start_height?: number
-          withdraw_reciever_address?: string | null
+          withdraw_receiver_address?: string | null
         }
         Relationships: []
       }
