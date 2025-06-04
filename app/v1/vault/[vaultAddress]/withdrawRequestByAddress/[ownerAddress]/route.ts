@@ -5,7 +5,7 @@ import { paginationSchema } from "@/app/types"
 
 /**
  * @swagger
- * /v1/vault/{vaultAddress}/withdrawRequestByAddress/{ethereumAddress}:
+ * /v1/vault/{vaultAddress}/withdrawRequestByAddress/{ownerAddress}:
  *   get:
  *     summary: Get vault withdraw request by ethereum address
  *     description: Retrieves withdraw requests for a given ethereum address in a specific vault
@@ -17,11 +17,11 @@ import { paginationSchema } from "@/app/types"
  *           type: string
  *         description: Ethereum address of the vault
  *       - in: path
- *         name: ethereumAddress
+ *         name: ownerAddress
  *         required: true
  *         schema:
  *           type: string
- *         description: Ethereum address to get withdraw requests for
+ *         description: Owner address to get withdraw requests for
  *       - in: query
  *         name: from
  *         schema:
@@ -66,17 +66,17 @@ import { paginationSchema } from "@/app/types"
 const querySchema = paginationSchema
 
 export async function GET(request: NextRequest,
-  { params }: { params: Promise<{ vaultAddress: string, ethereumAddress: string }> }
+  { params }: { params: Promise<{ vaultAddress: string, ownerAddress: string }> }
 ) {
 
-  const { vaultAddress, ethereumAddress } = await params
+  const { vaultAddress, ownerAddress } = await params
   try {
 
     if (!isAddress(vaultAddress)) {
       throw new Error('Invalid vault address')
     }
-    if (!isAddress(ethereumAddress)) {
-      throw new Error('Invalid ethereum address')
+    if (!isAddress(ownerAddress)) {
+      throw new Error('Invalid owner address')
     }
 
     const searchParams = request.nextUrl.searchParams
@@ -90,7 +90,7 @@ export async function GET(request: NextRequest,
       reciever_address,
       block_number
   `).eq('contract_address', vaultAddress)
-    .eq('ethereum_address', ethereumAddress)
+    .eq('owner_address', ownerAddress)
     .limit(Number(limit))
 
     if (order === 'desc') {

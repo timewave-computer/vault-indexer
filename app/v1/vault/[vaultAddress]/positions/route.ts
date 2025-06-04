@@ -18,10 +18,10 @@ import { paginationSchema } from "@/app/types"
  *           type: string
  *         description: Ethereum address of the vault
  *       - in: query
- *         name: ethereum_address
+ *         name: owner_address
  *         schema:
  *           type: string
- *         description: Optional filter by ethereum address
+ *         description: Optional filter by owner ethereum address
  *       - in: query
  *         name: from
  *         schema:
@@ -59,7 +59,9 @@ import { paginationSchema } from "@/app/types"
  *                         type: integer
  *                       position_end_height:
  *                         type: integer
- *                       ethereum_address:
+ *                       owner_address:
+ *                         type: string
+ *                       withdraw_reciever_address:
  *                         type: string
  *                       created_at:
  *                         type: string
@@ -68,7 +70,7 @@ import { paginationSchema } from "@/app/types"
  */
 
 const querySchema = paginationSchema.extend({
-  ethereum_address: z.string().optional(),
+  owner_address: z.string().optional(),
 })
 
 export async function GET(request: NextRequest,
@@ -81,22 +83,23 @@ export async function GET(request: NextRequest,
       throw new Error('Invalid vault address')
     }
     const searchParams = request.nextUrl.searchParams
-    const { ethereum_address, from, limit, order } = querySchema.parse(Object.fromEntries(searchParams.entries()))
+    const { owner_address, from, limit, order } = querySchema.parse(Object.fromEntries(searchParams.entries()))
 
     const query = supabase.from('positions').select(`
       id:position_index_id,
       amount_shares,
       position_start_height,
       position_end_height,
-      ethereum_address,
+      owner_address,
+      withdraw_reciever_address,
       created_at
   `).eq('contract_address', vaultAddress)
     .limit(Number(limit))
 
 
-    if (ethereum_address) {
-      if (!isAddress(ethereum_address)) {  throw new Error('Invalid ethereum address') }
-      query.eq('ethereum_address', ethereum_address)
+    if (owner_address) {
+      if (!isAddress(owner_address)) {  throw new Error('Invalid owner address') }
+      query.eq('owner_address', owner_address)
     }
     if (order === 'desc') {
       query.order('position_index_id', { ascending: false }).lte('position_index_id', from)
