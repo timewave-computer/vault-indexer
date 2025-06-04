@@ -8,7 +8,9 @@ CREATE TABLE IF NOT EXISTS events (
     log_index INTEGER NOT NULL,
     raw_data JSONB NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(transaction_hash, log_index)
+    last_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    is_processed BOOLEAN,
+    UNIQUE(block_number, log_index)
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_contract_address ON events(contract_address);

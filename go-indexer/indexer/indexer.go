@@ -74,16 +74,6 @@ func New(cfg *config.Config) (*Indexer, error) {
 func (i *Indexer) Start() error {
 	log.Println("Starting indexer...")
 
-	// Start position processor
-	if err := i.positionProcessor.Start(i.positionChan); err != nil {
-		return fmt.Errorf("failed to start position processor: %w", err)
-	}
-
-	// Start withdraw processor
-	if err := i.withdrawProcessor.Start(i.withdrawChan); err != nil {
-		return fmt.Errorf("failed to start withdraw processor: %w", err)
-	}
-
 	// Perform health check by getting current block height
 	blockNumber, err := i.client.BlockNumber(i.ctx)
 	if err != nil {
@@ -91,29 +81,42 @@ func (i *Indexer) Start() error {
 	}
 	log.Printf("Health check successful - Current block height: %d", blockNumber)
 
+	log.Printf("Processing historical events for %d contracts...", len(i.config.Contracts))
+
 	// Process historical events for each contract
 	for _, contract := range i.config.Contracts {
-		if err := i.processHistoricalEvents(contract); err != nil {
+		// will read historical events from the database and record them
+		if err := i.loadHistoricalEvents(contract); err != nil {
 			return fmt.Errorf("failed to process historical events for contract %s: %w", contract.Name, err)
 		}
 	}
 
-	// TODO: there is a window here where there might be new events that are missed while processing historical events.
-	// add a check to see if there are any new events since the last time we processed historical events.
-	// OR set up subscriptions immediately so the queue can fill, but only process them after historical events are processed.
+	// once finished, start transformation processor
 
-	// AFTER all historical events have been processed, set up subscriptions for new events
+	log.Printf("Setting up event subscriptions for %d contracts...", len(i.config.Contracts))
+	// set up event subscriptions for all contracts
 	for _, contract := range i.config.Contracts {
 		if err := i.setupEventSubscriptions(contract); err != nil {
+			// will subscribe to events for all contracts and begin recording them
 			return fmt.Errorf("failed to set up event subscriptions for contract %s: %w", contract.Name, err)
 		}
 	}
+
+	// // Start position processor
+	// if err := i.positionProcessor.Start(i.positionChan); err != nil {
+	// 	return fmt.Errorf("failed to start position processor: %w", err)
+	// }
+
+	// // Start withdraw processor
+	// if err := i.withdrawProcessor.Start(i.withdrawChan); err != nil {
+	// 	return fmt.Errorf("failed to start withdraw processor: %w", err)
+	// }
 
 	return nil
 }
 
 // processHistoricalEvents processes all historical events for a contract
-func (i *Indexer) processHistoricalEvents(contract config.ContractConfig) error {
+func (i *Indexer) loadHistoricalEvents(contract config.ContractConfig) error {
 	// Load ABI
 	abiPath := filepath.Join("abis", contract.ABIPath)
 	abiBytes, err := os.ReadFile(abiPath)
@@ -164,7 +167,7 @@ func (i *Indexer) processHistoricalEvents(contract config.ContractConfig) error 
 
 		// Process each log
 		for _, vLog := range logs {
-			if err := i.processEvent(vLog, event, contract.Name); err != nil {
+			if err := i.eventProcessor.processEvent(vLog, event, contract.Name); err != nil {
 				return fmt.Errorf("failed to process event: %w", err)
 			}
 		}
@@ -175,6 +178,7 @@ func (i *Indexer) processHistoricalEvents(contract config.ContractConfig) error 
 
 // setupEventSubscriptions sets up subscriptions for new events
 func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error {
+
 	// Load ABI
 	abiPath := filepath.Join("abis", contract.ABIPath)
 	abiBytes, err := os.ReadFile(abiPath)
@@ -212,7 +216,7 @@ func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error 
 					log.Printf("Subscription error: %v", err)
 					return
 				case vLog := <-logs:
-					if err := i.processEvent(vLog, event, contract.Name); err != nil {
+					if err := i.eventProcessor.processEvent(vLog, event, contract.Name); err != nil {
 						log.Printf("Error processing event: %v", err)
 					}
 				case <-i.ctx.Done():
@@ -222,51 +226,6 @@ func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error 
 		}()
 	}
 
-	return nil
-}
-
-func (i *Indexer) processEvent(vLog types.Log, event abi.Event, contractName string) error {
-	// Process the event using the event processor
-	eventData, err := i.eventProcessor.ProcessEvent(vLog, event, contractName)
-	if err != nil {
-		return fmt.Errorf("failed to process event: %w", err)
-	}
-
-	// Send event to appropriate processor based on event type
-	switch event.Name {
-	case "WithdrawRequested":
-		// Send to position channel
-		select {
-		case i.positionChan <- PositionEvent{
-			EventName: event.Name,
-			EventData: eventData,
-			Log:       vLog,
-		}:
-		case <-i.ctx.Done():
-			return fmt.Errorf("context cancelled while sending withdraw requested event to position processor")
-		}
-		// Send to withdraw channel
-		select {
-		case i.withdrawChan <- WithdrawRequestEvent{
-			EventName: event.Name,
-			EventData: eventData,
-			Log:       vLog,
-		}:
-		case <-i.ctx.Done():
-			return fmt.Errorf("context cancelled while sending withdraw requested event to withdraw processor")
-		}
-
-	case "Transfer":
-		select {
-		case i.positionChan <- PositionEvent{
-			EventName: event.Name,
-			EventData: eventData,
-			Log:       vLog,
-		}:
-		case <-i.ctx.Done():
-			return fmt.Errorf("context cancelled while sending transfer event to position processor")
-		}
-	}
 	return nil
 }
 

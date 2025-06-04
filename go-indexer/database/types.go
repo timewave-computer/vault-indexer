@@ -6,6 +6,8 @@ type PublicEventsSelect struct {
 	CreatedAt       *string     `json:"created_at"`
 	EventName       string      `json:"event_name"`
 	Id              string      `json:"id"`
+	IsProcessed     *bool       `json:"is_processed"`
+	LastUpdatedAt   *string     `json:"last_updated_at"`
 	LogIndex        int32       `json:"log_index"`
 	RawData         interface{} `json:"raw_data"`
 	TransactionHash string      `json:"transaction_hash"`
@@ -15,6 +17,7 @@ type PublicEventsInsert struct {
 	BlockNumber     int64       `json:"block_number"`
 	ContractAddress string      `json:"contract_address"`
 	EventName       string      `json:"event_name"`
+	IsProcessed     *bool       `json:"is_processed"`
 	LogIndex        int32       `json:"log_index"`
 	RawData         interface{} `json:"raw_data"`
 	TransactionHash string      `json:"transaction_hash"`
@@ -26,6 +29,8 @@ type PublicEventsUpdate struct {
 	CreatedAt       *string     `json:"created_at"`
 	EventName       *string     `json:"event_name"`
 	Id              *string     `json:"id"`
+	IsProcessed     *bool       `json:"is_processed"`
+	LastUpdatedAt   *string     `json:"last_updated_at"`
 	LogIndex        *int32      `json:"log_index"`
 	RawData         interface{} `json:"raw_data"`
 	TransactionHash *string     `json:"transaction_hash"`
