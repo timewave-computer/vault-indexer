@@ -104,7 +104,7 @@ func (p *WithdrawProcessor) processWithdrawRequest(event WithdrawRequestEvent) e
 		ContractAddress: contractAddress,
 		OwnerAddress:    ethereumAddress,
 		Amount:          amount,
-		RecieverAddress: neutronAddress,
+		ReceiverAddress: neutronAddress,
 		BlockNumber:     int64(event.Log.BlockNumber),
 	}, false, "", "", "").Execute()
 

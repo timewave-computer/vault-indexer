@@ -157,7 +157,7 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 
 				for _, update := range updates {
 					_, _, err = p.db.From("positions").Update(update, "", "").
-						Eq("id", update.Id).
+						Eq("id", *update.Id).
 						Execute()
 					if err != nil {
 						log.Printf("Error updating position: %v", err)
@@ -318,7 +318,7 @@ func updatePosition(
 	}
 
 	update = &database.PublicPositionsUpdate{
-		Id: currentPosition.Id,
+		Id: &currentPosition.Id,
 
 		// new values
 		IsTerminated:            &isTerminated,
