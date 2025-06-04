@@ -8,8 +8,6 @@ CREATE TABLE IF NOT EXISTS events (
     log_index INTEGER NOT NULL,
     raw_data JSONB NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    last_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    is_processed BOOLEAN,
     UNIQUE(block_number, log_index)
 );
 

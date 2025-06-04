@@ -91,9 +91,9 @@ func (i *Indexer) Start() error {
 		}
 	}
 
-	// once finished, start transformation processor
+	// TODO: once finished, start transformation processor
 
-	log.Printf("Setting up event subscriptions for %d contracts...", len(i.config.Contracts))
+	log.Printf("Listening to event subscriptions for %d contracts...", len(i.config.Contracts))
 	// set up event subscriptions for all contracts
 	for _, contract := range i.config.Contracts {
 		if err := i.setupEventSubscriptions(contract); err != nil {
