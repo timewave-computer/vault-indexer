@@ -136,7 +136,12 @@ func (i *Indexer) processHistoricalEvents(contract config.ContractConfig) error 
 
 	// Process historical events
 	fromBlock := big.NewInt(int64(contract.StartBlock))
-	toBlock := big.NewInt(int64(currentBlock))
+	var toBlock *big.Int
+	if contract.EndBlock == 0 {
+		toBlock = big.NewInt(int64(currentBlock))
+	} else {
+		toBlock = big.NewInt(int64(contract.EndBlock))
+	}
 
 	// Create filter query for each event
 	for _, eventName := range contract.Events {
