@@ -23,7 +23,7 @@
     "paths": {
         "/v1/vault/{vaultAddress}/positions": {
             "get": {
-                "summary": "Get positions for a specific vault",
+                "summary": "Get vault positions",
                 "description": "Retrieves positions for a given vault address with optional filtering and pagination",
                 "parameters": [
                     {
@@ -117,9 +117,9 @@
                 }
             }
         },
-        "/v1/vault/{vaultAddress}/withdrawRequest/{ethereumAddress}": {
+        "/v1/vault/{vaultAddress}/withdrawRequestByAddress/{ethereumAddress}": {
             "get": {
-                "summary": "Get withdraw requests for a specific address in a vault",
+                "summary": "Get vault withdraw request by ethereum address",
                 "description": "Retrieves withdraw requests for a given ethereum address in a specific vault",
                 "parameters": [
                     {
@@ -192,6 +192,94 @@
                                                         "type": "string"
                                                     },
                                                     "neutron_address": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters"
+                    }
+                }
+            }
+        },
+        "/v1/vault/{vaultAddress}/withdrawRequests": {
+            "get": {
+                "summary": "Get all withdraw requests for a vault",
+                "description": "Retrieves withdraw requests for a given vault address with pagination",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "vaultAddress",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Ethereum address of the vault"
+                    },
+                    {
+                        "in": "query",
+                        "name": "from",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Starting withdraw request ID for pagination"
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Number of records to return"
+                    },
+                    {
+                        "in": "query",
+                        "name": "order",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "asc",
+                                "desc"
+                            ]
+                        },
+                        "description": "Sort order"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of withdraw requests",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "integer"
+                                                    },
+                                                    "amount": {
+                                                        "type": "string"
+                                                    },
+                                                    "block_number": {
+                                                        "type": "integer"
+                                                    },
+                                                    "owner_address": {
+                                                        "type": "string"
+                                                    },
+                                                    "reciever_address": {
+                                                        "type": "string"
+                                                    },
+                                                    "created_at": {
                                                         "type": "string"
                                                     }
                                                 }
