@@ -89,7 +89,7 @@ func (e *EventProcessor) processEvent(vLog types.Log, event abi.Event, contractN
 	}
 }
 
-func parseEvent(vLog types.Log, event abi.Event, contractName string) (*database.PublicEventsInsert, error) {
+func parseEvent(vLog types.Log, event abi.Event, contractName string) (*EventIngestionInsert, error) {
 	// Parse the event data
 	eventData := make(map[string]interface{})
 
@@ -138,16 +138,16 @@ func parseEvent(vLog types.Log, event abi.Event, contractName string) (*database
 		return nil, fmt.Errorf("failed to marshal event data: %w", err)
 	}
 
-	eventRecord := &database.PublicEventsInsert{
+	eventRecord := ToEventIngestionInsert(database.PublicEventsInsert{
 		ContractAddress: vLog.Address.Hex(),
 		EventName:       event.Name,
 		BlockNumber:     int64(vLog.BlockNumber),
 		TransactionHash: vLog.TxHash.Hex(),
 		LogIndex:        int32(vLog.Index),
 		RawData:         eventJSON,
-	}
+	})
 
-	return eventRecord, nil
+	return &eventRecord, nil
 }
 
 type EventIngestionUpdate struct {
@@ -160,5 +160,28 @@ func ToEventIngestionUpdate(u database.PublicEventsUpdate) EventIngestionUpdate 
 
 	return EventIngestionUpdate{
 		LastUpdatedAt: u.LastUpdatedAt,
+	}
+}
+
+type EventIngestionInsert struct {
+	ContractAddress string      `json:"contract_address"`
+	EventName       string      `json:"event_name"`
+	BlockNumber     int64       `json:"block_number"`
+	TransactionHash string      `json:"transaction_hash"`
+	LogIndex        int32       `json:"log_index"`
+	RawData         interface{} `json:"raw_data"`
+}
+
+func ToEventIngestionInsert(u database.PublicEventsInsert) EventIngestionInsert {
+
+	// omits empty values so they are not attempted to be updated
+
+	return EventIngestionInsert{
+		ContractAddress: u.ContractAddress,
+		EventName:       u.EventName,
+		BlockNumber:     u.BlockNumber,
+		TransactionHash: u.TransactionHash,
+		LogIndex:        u.LogIndex,
+		RawData:         u.RawData,
 	}
 }
