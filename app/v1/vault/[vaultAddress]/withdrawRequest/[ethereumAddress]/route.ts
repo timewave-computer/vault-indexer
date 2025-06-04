@@ -7,7 +7,7 @@ import { paginationSchema } from "@/app/types"
  * @swagger
  * /v1/vault/{vaultAddress}/withdrawRequest/{ethereumAddress}:
  *   get:
- *     summary: Get withdraw requests for a specific address in a vault
+ *     summary: Get vault withdraw request
  *     description: Retrieves withdraw requests for a given ethereum address in a specific vault
  *     parameters:
  *       - in: path
@@ -86,7 +86,9 @@ export async function GET(request: NextRequest,
       id:withdraw_id,
       amount,
       created_at,
-      neutron_address
+      owner_address,
+      reciever_address,
+      block_number
   `).eq('contract_address', vaultAddress)
     .eq('ethereum_address', ethereumAddress)
     .limit(Number(limit))

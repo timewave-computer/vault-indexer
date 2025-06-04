@@ -44,8 +44,13 @@ npx supabase db reset
 
 ### Restart system
 ```bash
-npx supabase stop
+npx supabase stop --no-backup ## drops DB
+
+docker stop $(docker ps -a -q)
+docker rm $(docker ps -a -q)
 docker network prune
+
+
 ```
 
 ## Indexer

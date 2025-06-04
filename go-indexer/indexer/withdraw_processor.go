@@ -102,9 +102,10 @@ func (p *WithdrawProcessor) processWithdrawRequest(event WithdrawRequestEvent) e
 	_, _, err := p.db.From("withdraw_requests").Insert(database.PublicWithdrawRequestsInsert{
 		WithdrawId:      withdrawId,
 		ContractAddress: contractAddress,
-		EthereumAddress: ethereumAddress,
+		OwnerAddress:    ethereumAddress,
 		Amount:          amount,
-		NeutronAddress:  neutronAddress,
+		RecieverAddress: neutronAddress,
+		BlockNumber:     int64(event.Log.BlockNumber),
 	}, false, "", "", "").Execute()
 
 	if err != nil {

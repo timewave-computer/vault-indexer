@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS positions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     position_index_id BIGINT NOT NULL,
     contract_address TEXT NOT NULL,
-    ethereum_address TEXT NOT NULL,
-    neutron_address TEXT,
+    owner_address TEXT NOT NULL,
+    withdraw_reciever_address TEXT,
     position_start_height BIGINT NOT NULL,
     position_end_height BIGINT,
     amount_shares TEXT NOT NULL,
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS positions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_positions_contract_address ON positions(contract_address);
-CREATE INDEX IF NOT EXISTS idx_positions_ethereum_address ON positions(ethereum_address);
+CREATE INDEX IF NOT EXISTS idx_positions_owner_address ON positions(owner_address);
 
 -- Enforce per-vault uniqueness of the running index
 CREATE UNIQUE INDEX IF NOT EXISTS idx_positions_contract_address_position_index_id
@@ -49,13 +49,14 @@ CREATE TABLE IF NOT EXISTS withdraw_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     withdraw_id BIGINT NOT NULL,
     contract_address TEXT NOT NULL,
-    ethereum_address TEXT NOT NULL,
+    block_number BIGINT NOT NULL,
+    owner_address TEXT NOT NULL,
     amount TEXT NOT NULL,
-    neutron_address TEXT NOT NULL,
+    reciever_address TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_withdraw_requests_contract_address ON withdraw_requests(contract_address);
-CREATE INDEX IF NOT EXISTS idx_withdraw_requests_ethereum_address ON withdraw_requests(ethereum_address);
+CREATE INDEX IF NOT EXISTS idx_withdraw_requests_owner_address ON withdraw_requests(owner_address);
 CREATE INDEX IF NOT EXISTS idx_withdraw_requests_withdraw_id ON withdraw_requests(withdraw_id);
 
 

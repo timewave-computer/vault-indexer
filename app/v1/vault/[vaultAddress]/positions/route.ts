@@ -8,7 +8,7 @@ import { paginationSchema } from "@/app/types"
  * @swagger
  * /v1/vault/{vaultAddress}/positions:
  *   get:
- *     summary: Get positions for a specific vault
+ *     summary: Get vault positions
  *     description: Retrieves positions for a given vault address with optional filtering and pagination
  *     parameters:
  *       - in: path
