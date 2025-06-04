@@ -54,14 +54,14 @@ func TestProcessDeposit(t *testing.T) {
 
 		var expectedInserts = []database.PublicPositionsInsert{
 			{
-				EthereumAddress:     UserAddress1,
-				ContractAddress:     VaultAddress,
-				AmountShares:        "50",
-				PositionStartHeight: 1000,
-				PositionEndHeight:   nil,
-				IsTerminated:        nil,
-				NeutronAddress:      nil,
-				PositionIndexId:     101,
+				OwnerAddress:            UserAddress1,
+				ContractAddress:         VaultAddress,
+				AmountShares:            "50",
+				PositionStartHeight:     1000,
+				PositionEndHeight:       nil,
+				IsTerminated:            nil,
+				WithdrawReceiverAddress: nil,
+				PositionIndexId:         101,
 			},
 		}
 
@@ -76,15 +76,15 @@ func TestProcessDeposit(t *testing.T) {
 	t.Run("deposit, existing position", func(t *testing.T) {
 		processor := &PositionProcessor{}
 		var receiverPosition = database.PublicPositionsSelect{
-			Id:                  PositionId1,
-			PositionIndexId:     0,
-			AmountShares:        "100",
-			PositionEndHeight:   nil,
-			IsTerminated:        toBoolPtr(false),
-			NeutronAddress:      nil,
-			PositionStartHeight: 1000,
-			EthereumAddress:     UserAddress1,
-			ContractAddress:     VaultAddress,
+			Id:                      PositionId1,
+			PositionIndexId:         0,
+			AmountShares:            "100",
+			PositionEndHeight:       nil,
+			IsTerminated:            toBoolPtr(false),
+			WithdrawReceiverAddress: nil,
+			PositionStartHeight:     1000,
+			OwnerAddress:            UserAddress1,
+			ContractAddress:         VaultAddress,
 		}
 		var event = PositionEvent{
 			EventName: "Transfer",
@@ -109,14 +109,14 @@ func TestProcessDeposit(t *testing.T) {
 		}
 		var expectedInserts = []database.PublicPositionsInsert{
 			{
-				EthereumAddress:     UserAddress1,
-				ContractAddress:     VaultAddress,
-				AmountShares:        "150",
-				PositionStartHeight: 2000,
-				PositionEndHeight:   nil,
-				IsTerminated:        nil,
-				NeutronAddress:      nil,
-				PositionIndexId:     101,
+				OwnerAddress:            UserAddress1,
+				ContractAddress:         VaultAddress,
+				AmountShares:            "150",
+				PositionStartHeight:     2000,
+				PositionEndHeight:       nil,
+				IsTerminated:            nil,
+				WithdrawReceiverAddress: nil,
+				PositionIndexId:         101,
 			},
 		}
 		assert.NoError(t, err)
@@ -141,14 +141,14 @@ func TestProcessTransfer(t *testing.T) {
 			},
 		}
 		var senderPosition = &database.PublicPositionsSelect{
-			Id:                  PositionId1,
-			AmountShares:        "100",
-			PositionEndHeight:   nil,
-			IsTerminated:        toBoolPtr(false),
-			NeutronAddress:      nil,
-			PositionStartHeight: 1000,
-			EthereumAddress:     UserAddress1,
-			ContractAddress:     VaultAddress,
+			Id:                      PositionId1,
+			AmountShares:            "100",
+			PositionEndHeight:       nil,
+			IsTerminated:            toBoolPtr(false),
+			WithdrawReceiverAddress: nil,
+			PositionStartHeight:     1000,
+			OwnerAddress:            UserAddress1,
+			ContractAddress:         VaultAddress,
 		}
 
 		var receiverPosition *database.PublicPositionsSelect = nil
@@ -156,14 +156,14 @@ func TestProcessTransfer(t *testing.T) {
 
 		var expectedInserts = []database.PublicPositionsInsert{
 			{
-				EthereumAddress:     UserAddress2,
-				ContractAddress:     VaultAddress,
-				AmountShares:        "100",
-				PositionStartHeight: 2000,
-				PositionEndHeight:   nil,
-				IsTerminated:        nil,
-				NeutronAddress:      nil,
-				PositionIndexId:     101,
+				OwnerAddress:            UserAddress2,
+				ContractAddress:         VaultAddress,
+				AmountShares:            "100",
+				PositionStartHeight:     2000,
+				PositionEndHeight:       nil,
+				IsTerminated:            nil,
+				WithdrawReceiverAddress: nil,
+				PositionIndexId:         101,
 			},
 		}
 
@@ -196,40 +196,40 @@ func TestProcessTransfer(t *testing.T) {
 			},
 		}
 		var senderPosition = &database.PublicPositionsSelect{
-			Id:                  PositionId1,
-			AmountShares:        "100",
-			PositionEndHeight:   nil,
-			IsTerminated:        toBoolPtr(false),
-			NeutronAddress:      nil,
-			PositionStartHeight: 1000,
-			EthereumAddress:     UserAddress1,
-			ContractAddress:     VaultAddress,
-			PositionIndexId:     0,
+			Id:                      PositionId1,
+			AmountShares:            "100",
+			PositionEndHeight:       nil,
+			IsTerminated:            toBoolPtr(false),
+			WithdrawReceiverAddress: nil,
+			PositionStartHeight:     1000,
+			OwnerAddress:            UserAddress1,
+			ContractAddress:         VaultAddress,
+			PositionIndexId:         0,
 		}
 
 		var receiverPosition = &database.PublicPositionsSelect{
-			Id:                  PositionId2,
-			AmountShares:        "100",
-			PositionEndHeight:   nil,
-			IsTerminated:        toBoolPtr(false),
-			NeutronAddress:      nil,
-			PositionStartHeight: 1000,
-			EthereumAddress:     UserAddress2,
-			ContractAddress:     VaultAddress,
-			PositionIndexId:     1,
+			Id:                      PositionId2,
+			AmountShares:            "100",
+			PositionEndHeight:       nil,
+			IsTerminated:            toBoolPtr(false),
+			WithdrawReceiverAddress: nil,
+			PositionStartHeight:     1000,
+			OwnerAddress:            UserAddress2,
+			ContractAddress:         VaultAddress,
+			PositionIndexId:         1,
 		}
 		gotInserts, gotUpdates, err := processor.processPositionEvent(event, senderPosition, receiverPosition, maxPositionIndexId)
 
 		var expectedInserts = []database.PublicPositionsInsert{
 			{
-				EthereumAddress:     UserAddress2,
-				ContractAddress:     VaultAddress,
-				AmountShares:        "200",
-				PositionStartHeight: 2000,
-				PositionEndHeight:   nil,
-				IsTerminated:        nil,
-				NeutronAddress:      nil,
-				PositionIndexId:     101,
+				OwnerAddress:            UserAddress2,
+				ContractAddress:         VaultAddress,
+				AmountShares:            "200",
+				PositionStartHeight:     2000,
+				PositionEndHeight:       nil,
+				IsTerminated:            nil,
+				WithdrawReceiverAddress: nil,
+				PositionIndexId:         101,
 			},
 		}
 
@@ -267,50 +267,50 @@ func TestProcessTransfer(t *testing.T) {
 			},
 		}
 		var senderPosition = &database.PublicPositionsSelect{
-			Id:                  PositionId1,
-			AmountShares:        "100",
-			PositionEndHeight:   nil,
-			IsTerminated:        toBoolPtr(false),
-			NeutronAddress:      nil,
-			PositionStartHeight: 1000,
-			EthereumAddress:     UserAddress1,
-			ContractAddress:     VaultAddress,
-			PositionIndexId:     0,
+			Id:                      PositionId1,
+			AmountShares:            "100",
+			PositionEndHeight:       nil,
+			IsTerminated:            toBoolPtr(false),
+			WithdrawReceiverAddress: nil,
+			PositionStartHeight:     1000,
+			OwnerAddress:            UserAddress1,
+			ContractAddress:         VaultAddress,
+			PositionIndexId:         0,
 		}
 
 		var receiverPosition = &database.PublicPositionsSelect{
-			Id:                  PositionId2,
-			AmountShares:        "100",
-			PositionEndHeight:   nil,
-			IsTerminated:        toBoolPtr(false),
-			NeutronAddress:      nil,
-			PositionStartHeight: 1000,
-			EthereumAddress:     UserAddress2,
-			ContractAddress:     VaultAddress,
-			PositionIndexId:     1,
+			Id:                      PositionId2,
+			AmountShares:            "100",
+			PositionEndHeight:       nil,
+			IsTerminated:            toBoolPtr(false),
+			WithdrawReceiverAddress: nil,
+			PositionStartHeight:     1000,
+			OwnerAddress:            UserAddress2,
+			ContractAddress:         VaultAddress,
+			PositionIndexId:         1,
 		}
 		gotInserts, gotUpdates, err := processor.processPositionEvent(event, senderPosition, receiverPosition, maxPositionIndexId)
 
 		var expectedInserts = []database.PublicPositionsInsert{
 			{
-				EthereumAddress:     UserAddress2,
-				ContractAddress:     VaultAddress,
-				AmountShares:        "150",
-				PositionStartHeight: 2000,
-				PositionEndHeight:   nil,
-				IsTerminated:        nil,
-				NeutronAddress:      nil,
-				PositionIndexId:     101,
+				OwnerAddress:            UserAddress2,
+				ContractAddress:         VaultAddress,
+				AmountShares:            "150",
+				PositionStartHeight:     2000,
+				PositionEndHeight:       nil,
+				IsTerminated:            nil,
+				WithdrawReceiverAddress: nil,
+				PositionIndexId:         101,
 			},
 			{
-				EthereumAddress:     UserAddress1,
-				ContractAddress:     VaultAddress,
-				AmountShares:        "50",
-				PositionStartHeight: 2000,
-				PositionEndHeight:   nil,
-				IsTerminated:        nil,
-				NeutronAddress:      nil,
-				PositionIndexId:     102,
+				OwnerAddress:            UserAddress1,
+				ContractAddress:         VaultAddress,
+				AmountShares:            "50",
+				PositionStartHeight:     2000,
+				PositionEndHeight:       nil,
+				IsTerminated:            nil,
+				WithdrawReceiverAddress: nil,
+				PositionIndexId:         102,
 			},
 		}
 
@@ -339,14 +339,14 @@ func TestProcessWithdraw(t *testing.T) {
 	t.Run("partial withdraw", func(t *testing.T) {
 		processor := &PositionProcessor{}
 		var currentPosition = database.PublicPositionsSelect{
-			Id:                  PositionId1,
-			AmountShares:        "100",
-			PositionEndHeight:   nil,
-			IsTerminated:        toBoolPtr(false),
-			NeutronAddress:      nil,
-			PositionStartHeight: 1000,
-			EthereumAddress:     UserAddress1,
-			ContractAddress:     VaultAddress,
+			Id:                      PositionId1,
+			AmountShares:            "100",
+			PositionEndHeight:       nil,
+			IsTerminated:            toBoolPtr(false),
+			WithdrawReceiverAddress: nil,
+			PositionStartHeight:     1000,
+			OwnerAddress:            UserAddress1,
+			ContractAddress:         VaultAddress,
 		}
 		var event = PositionEvent{
 			EventName: "WithdrawRequested",
@@ -364,15 +364,15 @@ func TestProcessWithdraw(t *testing.T) {
 
 		var expectedUpdates = []database.PublicPositionsUpdate{
 			{
-				Id:                currentPosition.Id,
-				PositionEndHeight: toInt64Ptr(1999),
-				IsTerminated:      toBoolPtr(false),
-				NeutronAddress:    toStringPtr(NeutronAddress1),
+				Id:                      currentPosition.Id,
+				PositionEndHeight:       toInt64Ptr(1999),
+				IsTerminated:            toBoolPtr(false),
+				WithdrawReceiverAddress: toStringPtr(NeutronAddress1),
 			},
 		}
 		var expectedInserts = []database.PublicPositionsInsert{
 			{
-				EthereumAddress:     UserAddress1,
+				OwnerAddress:        UserAddress1,
 				ContractAddress:     VaultAddress,
 				AmountShares:        "50",
 				PositionStartHeight: 2000,
@@ -389,14 +389,14 @@ func TestProcessWithdraw(t *testing.T) {
 	t.Run("full withdraw", func(t *testing.T) {
 		processor := &PositionProcessor{}
 		var senderPosition = database.PublicPositionsSelect{
-			Id:                  PositionId1,
-			AmountShares:        "100",
-			PositionEndHeight:   nil,
-			IsTerminated:        toBoolPtr(false),
-			NeutronAddress:      nil,
-			PositionStartHeight: 1000,
-			EthereumAddress:     UserAddress1,
-			ContractAddress:     VaultAddress,
+			Id:                      PositionId1,
+			AmountShares:            "100",
+			PositionEndHeight:       nil,
+			IsTerminated:            toBoolPtr(false),
+			WithdrawReceiverAddress: nil,
+			PositionStartHeight:     1000,
+			OwnerAddress:            UserAddress1,
+			ContractAddress:         VaultAddress,
 		}
 		var event = PositionEvent{
 			EventName: "WithdrawRequested",
@@ -415,10 +415,10 @@ func TestProcessWithdraw(t *testing.T) {
 		var expectedInserts = []database.PublicPositionsInsert(nil)
 		var expectedUpdates = []database.PublicPositionsUpdate{
 			{
-				Id:                senderPosition.Id,
-				PositionEndHeight: toInt64Ptr(1999),
-				IsTerminated:      toBoolPtr(true),
-				NeutronAddress:    toStringPtr(NeutronAddress1),
+				Id:                      senderPosition.Id,
+				PositionEndHeight:       toInt64Ptr(1999),
+				IsTerminated:            toBoolPtr(true),
+				WithdrawReceiverAddress: toStringPtr(NeutronAddress1),
 			},
 		}
 
@@ -451,21 +451,21 @@ func TestProcessWithdraw(t *testing.T) {
 func TestUpdatePosition(t *testing.T) {
 	t.Run("update position with addition", func(t *testing.T) {
 		currentPosition := &database.PublicPositionsSelect{
-			Id:                  PositionId1,
-			AmountShares:        "100",
-			PositionEndHeight:   nil,
-			IsTerminated:        toBoolPtr(false),
-			NeutronAddress:      nil,
-			PositionStartHeight: 1000,
-			EthereumAddress:     UserAddress1,
-			ContractAddress:     VaultAddress,
-			PositionIndexId:     0,
+			Id:                      PositionId1,
+			AmountShares:            "100",
+			PositionEndHeight:       nil,
+			IsTerminated:            toBoolPtr(false),
+			WithdrawReceiverAddress: nil,
+			PositionStartHeight:     1000,
+			OwnerAddress:            UserAddress1,
+			ContractAddress:         VaultAddress,
+			PositionIndexId:         0,
 		}
 
 		insert, update := updatePosition(currentPosition, UserAddress1, "50", 2000, true, nil, toInt64Ptr(maxPositionIndexId))
 
 		expectedInsert := &database.PublicPositionsInsert{
-			EthereumAddress:     UserAddress1,
+			OwnerAddress:        UserAddress1,
 			ContractAddress:     VaultAddress,
 			AmountShares:        "150",
 			PositionStartHeight: 2000,
@@ -484,14 +484,14 @@ func TestUpdatePosition(t *testing.T) {
 
 	t.Run("update position with subtraction to zero", func(t *testing.T) {
 		currentPosition := &database.PublicPositionsSelect{
-			Id:                  PositionId1,
-			AmountShares:        "100",
-			PositionEndHeight:   nil,
-			IsTerminated:        toBoolPtr(false),
-			NeutronAddress:      nil,
-			PositionStartHeight: 1000,
-			EthereumAddress:     UserAddress1,
-			ContractAddress:     VaultAddress,
+			Id:                      PositionId1,
+			AmountShares:            "100",
+			PositionEndHeight:       nil,
+			IsTerminated:            toBoolPtr(false),
+			WithdrawReceiverAddress: nil,
+			PositionStartHeight:     1000,
+			OwnerAddress:            UserAddress1,
+			ContractAddress:         VaultAddress,
 		}
 
 		insert, update := updatePosition(currentPosition, UserAddress1, "100", 2000, false, nil, toInt64Ptr(0))

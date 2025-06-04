@@ -72,63 +72,69 @@ export type Database = {
           amount_shares: string
           contract_address: string
           created_at: string
-          ethereum_address: string
-          id: number
+          id: string
           is_terminated: boolean | null
-          neutron_address: string | null
+          owner_address: string
           position_end_height: number | null
+          position_index_id: number
           position_start_height: number
+          withdraw_receiver_address: string | null
         }
         Insert: {
           amount_shares: string
           contract_address: string
           created_at?: string
-          ethereum_address: string
-          id?: number
+          id?: string
           is_terminated?: boolean | null
-          neutron_address?: string | null
+          owner_address: string
           position_end_height?: number | null
+          position_index_id: number
           position_start_height: number
+          withdraw_receiver_address?: string | null
         }
         Update: {
           amount_shares?: string
           contract_address?: string
           created_at?: string
-          ethereum_address?: string
-          id?: number
+          id?: string
           is_terminated?: boolean | null
-          neutron_address?: string | null
+          owner_address?: string
           position_end_height?: number | null
+          position_index_id?: number
           position_start_height?: number
+          withdraw_receiver_address?: string | null
         }
         Relationships: []
       }
       withdraw_requests: {
         Row: {
           amount: string
+          block_number: number
           contract_address: string
           created_at: string
-          ethereum_address: string
           id: string
-          neutron_address: string
+          owner_address: string
+          receiver_address: string
           withdraw_id: number
         }
         Insert: {
           amount: string
+          block_number: number
           contract_address: string
           created_at?: string
-          ethereum_address: string
           id?: string
-          neutron_address: string
+          owner_address: string
+          receiver_address: string
           withdraw_id: number
         }
         Update: {
           amount?: string
+          block_number?: number
           contract_address?: string
           created_at?: string
-          ethereum_address?: string
           id?: string
-          neutron_address?: string
+          owner_address?: string
+          receiver_address?: string
           withdraw_id?: number
         }
         Relationships: []

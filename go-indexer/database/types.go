@@ -32,60 +32,63 @@ type PublicEventsUpdate struct {
 }
 
 type PublicPositionsSelect struct {
-	AmountShares        string  `json:"amount_shares"`
-	ContractAddress     string  `json:"contract_address"`
-	CreatedAt           string  `json:"created_at"`
-	EthereumAddress     string  `json:"ethereum_address"`
-	Id                  string  `json:"id"`
-	IsTerminated        *bool   `json:"is_terminated"`
-	NeutronAddress      *string `json:"neutron_address"`
-	PositionEndHeight   *int64  `json:"position_end_height"`
-	PositionIndexId     int64   `json:"position_index_id"`
-	PositionStartHeight int64   `json:"position_start_height"`
+	AmountShares            string  `json:"amount_shares"`
+	ContractAddress         string  `json:"contract_address"`
+	CreatedAt               string  `json:"created_at"`
+	Id                      string  `json:"id"`
+	IsTerminated            *bool   `json:"is_terminated"`
+	OwnerAddress            string  `json:"owner_address"`
+	PositionEndHeight       *int64  `json:"position_end_height"`
+	PositionIndexId         int64   `json:"position_index_id"`
+	PositionStartHeight     int64   `json:"position_start_height"`
+	WithdrawReceiverAddress *string `json:"withdraw_receiver_address"`
 }
 
 type PublicPositionsInsert struct {
-	AmountShares        string  `json:"amount_shares"`
-	ContractAddress     string  `json:"contract_address"`
-	EthereumAddress     string  `json:"ethereum_address"`
-	IsTerminated        *bool   `json:"is_terminated"`
-	NeutronAddress      *string `json:"neutron_address"`
-	PositionEndHeight   *int64  `json:"position_end_height"`
-	PositionIndexId     int64   `json:"position_index_id"`
-	PositionStartHeight int64   `json:"position_start_height"`
+	AmountShares            string  `json:"amount_shares"`
+	ContractAddress         string  `json:"contract_address"`
+	IsTerminated            *bool   `json:"is_terminated"`
+	OwnerAddress            string  `json:"owner_address"`
+	PositionEndHeight       *int64  `json:"position_end_height"`
+	PositionIndexId         int64   `json:"position_index_id"`
+	PositionStartHeight     int64   `json:"position_start_height"`
+	WithdrawReceiverAddress *string `json:"withdraw_receiver_address"`
 }
 
 type PublicPositionsUpdate struct {
-	Id                string  `json:"id"`
-	IsTerminated      *bool   `json:"is_terminated"`
-	NeutronAddress    *string `json:"neutron_address"`
-	PositionEndHeight *int64  `json:"position_end_height"`
+	Id                      string `json:"id"`
+	IsTerminated            bool   `json:"is_terminated"`
+	PositionEndHeight       int64  `json:"position_end_height"`
+	WithdrawReceiverAddress string `json:"withdraw_receiver_address"`
 }
 
 type PublicWithdrawRequestsSelect struct {
 	Amount          string `json:"amount"`
+	BlockNumber     int64  `json:"block_number"`
 	ContractAddress string `json:"contract_address"`
 	CreatedAt       string `json:"created_at"`
-	EthereumAddress string `json:"ethereum_address"`
 	Id              string `json:"id"`
-	NeutronAddress  string `json:"neutron_address"`
+	OwnerAddress    string `json:"owner_address"`
+	ReceiverAddress string `json:"receiver_address"`
 	WithdrawId      int64  `json:"withdraw_id"`
 }
 
 type PublicWithdrawRequestsInsert struct {
 	Amount          string `json:"amount"`
+	BlockNumber     int64  `json:"block_number"`
 	ContractAddress string `json:"contract_address"`
-	EthereumAddress string `json:"ethereum_address"`
-	NeutronAddress  string `json:"neutron_address"`
+	OwnerAddress    string `json:"owner_address"`
+	ReceiverAddress string `json:"receiver_address"`
 	WithdrawId      int64  `json:"withdraw_id"`
 }
 
 type PublicWithdrawRequestsUpdate struct {
 	Amount          *string `json:"amount"`
+	BlockNumber     *int64  `json:"block_number"`
 	ContractAddress *string `json:"contract_address"`
 	CreatedAt       *string `json:"created_at"`
-	EthereumAddress *string `json:"ethereum_address"`
 	Id              *string `json:"id"`
-	NeutronAddress  *string `json:"neutron_address"`
+	OwnerAddress    *string `json:"owner_address"`
+	ReceiverAddress *string `json:"receiver_address"`
 	WithdrawId      *int64  `json:"withdraw_id"`
 }

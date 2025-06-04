@@ -5,9 +5,9 @@ import { paginationSchema } from "@/app/types"
 
 /**
  * @swagger
- * /v1/vault/{vaultAddress}/withdrawRequest/{ethereumAddress}:
+ * /v1/vault/{vaultAddress}/withdrawRequestByAddress/{ownerAddress}:
  *   get:
- *     summary: Get withdraw requests for a specific address in a vault
+ *     summary: Get vault withdraw request by ethereum address
  *     description: Retrieves withdraw requests for a given ethereum address in a specific vault
  *     parameters:
  *       - in: path
@@ -17,11 +17,11 @@ import { paginationSchema } from "@/app/types"
  *           type: string
  *         description: Ethereum address of the vault
  *       - in: path
- *         name: ethereumAddress
+ *         name: ownerAddress
  *         required: true
  *         schema:
  *           type: string
- *         description: Ethereum address to get withdraw requests for
+ *         description: Owner address to get withdraw requests for
  *       - in: query
  *         name: from
  *         schema:
@@ -53,30 +53,48 @@ import { paginationSchema } from "@/app/types"
  *                     properties:
  *                       id:
  *                         type: integer
+ *                         description: Withdraw request ID
  *                       amount:
  *                         type: string
+ *                         description: Amount to withdraw
  *                       created_at:
  *                         type: string
- *                       neutron_address:
+ *                         description: Timestamp of request creation
+ *                       owner_address:
  *                         type: string
+ *                         description: Ethereum address of the request owner
+ *                       receiver_address:
+ *                         type: string
+ *                         description: Ethereum address of the receiver
+ *                       block_number:
+ *                         type: integer
+ *                         description: Block number when the request was created
  *       400:
  *         description: Invalid request parameters
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   description: Error message describing what went wrong
  */
 
 const querySchema = paginationSchema
 
 export async function GET(request: NextRequest,
-  { params }: { params: Promise<{ vaultAddress: string, ethereumAddress: string }> }
+  { params }: { params: Promise<{ vaultAddress: string, ownerAddress: string }> }
 ) {
 
-  const { vaultAddress, ethereumAddress } = await params
+  const { vaultAddress, ownerAddress } = await params
   try {
 
     if (!isAddress(vaultAddress)) {
       throw new Error('Invalid vault address')
     }
-    if (!isAddress(ethereumAddress)) {
-      throw new Error('Invalid ethereum address')
+    if (!isAddress(ownerAddress)) {
+      throw new Error('Invalid owner address')
     }
 
     const searchParams = request.nextUrl.searchParams
@@ -86,9 +104,11 @@ export async function GET(request: NextRequest,
       id:withdraw_id,
       amount,
       created_at,
-      neutron_address
+      owner_address,
+      receiver_address,
+      block_number
   `).eq('contract_address', vaultAddress)
-    .eq('ethereum_address', ethereumAddress)
+    .eq('owner_address', ownerAddress)
     .limit(Number(limit))
 
     if (order === 'desc') {

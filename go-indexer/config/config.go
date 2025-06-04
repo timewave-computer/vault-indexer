@@ -22,6 +22,7 @@ type ContractConfig struct {
 	Name       string   `mapstructure:"name"`
 	Address    string   `mapstructure:"address"`
 	StartBlock uint64   `mapstructure:"start_block"`
+	EndBlock   uint64   `mapstructure:"end_block"`
 	ABIPath    string   `mapstructure:"abi_path"`
 	Events     []string `mapstructure:"events"`
 }

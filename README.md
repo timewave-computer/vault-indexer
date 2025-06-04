@@ -44,8 +44,13 @@ npx supabase db reset
 
 ### Restart system
 ```bash
-npx supabase stop
+npx supabase stop --no-backup ## drops DB
+
+docker stop $(docker ps -a -q)
+docker rm $(docker ps -a -q)
 docker network prune
+
+
 ```
 
 ## Indexer
@@ -107,7 +112,7 @@ Visit the api at `localhost:3000/v1`
 ## Updating API schema
 The automated process fails in deployment, so this is a temporary approach.
 
-- visit `/gen-openapi.json` locally and copy static file
+- visit `/api-gen` locally and copy static file
 - paste in `public/openapi.json`
 
 

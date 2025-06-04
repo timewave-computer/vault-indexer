@@ -6,7 +6,7 @@ import { paginationSchema } from "@/app/types"
  * @swagger
  * /v1/vault/{vaultAddress}/accounts:
  *   get:
- *     summary: Get accounts for a specific vault
+*     summary: Get accounts for a specific vault
  *     description: Retrieves accounts for a given vault address with pagination
  *     parameters:
  *       - in: path

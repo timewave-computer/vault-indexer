@@ -216,14 +216,14 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, senderPos 
 			// create a new position
 			positionIndexId++
 			inserts = append(inserts, database.PublicPositionsInsert{
-				PositionIndexId:     positionIndexId,
-				EthereumAddress:     receiverAddress,
-				ContractAddress:     event.Log.Address.Hex(),
-				AmountShares:        amount_shares,
-				PositionStartHeight: int64(event.Log.BlockNumber),
-				PositionEndHeight:   nil,
-				IsTerminated:        nil, // this is only incrementing, can't be terminated
-				NeutronAddress:      nil,
+				PositionIndexId:         positionIndexId,
+				OwnerAddress:            receiverAddress,
+				ContractAddress:         event.Log.Address.Hex(),
+				AmountShares:            amount_shares,
+				PositionStartHeight:     int64(event.Log.BlockNumber),
+				PositionEndHeight:       nil,
+				IsTerminated:            nil, // this is only incrementing, can't be terminated
+				WithdrawReceiverAddress: nil,
 			})
 
 		} else {
@@ -300,6 +300,8 @@ func updatePosition(
 	newAmountShares := computeNewAmountShares(currentPosition, amountShares, isAddition)
 	endHeight := int64(blockNumber - 1)
 
+	log.Printf("blockNumber: %v, endHeight: %v", blockNumber, endHeight)
+
 	// Check if the position should be terminated (either zero balance)
 	var isTerminated = newAmountShares == "0"
 
@@ -309,7 +311,7 @@ func updatePosition(
 	if !isTerminated {
 		*maxPositionIndexId++
 		insert = &database.PublicPositionsInsert{
-			EthereumAddress:     address,
+			OwnerAddress:        address,
 			ContractAddress:     currentPosition.ContractAddress,
 			AmountShares:        newAmountShares,
 			PositionStartHeight: int64(blockNumber),
@@ -321,9 +323,9 @@ func updatePosition(
 		Id: currentPosition.Id,
 
 		// new values
-		IsTerminated:      &isTerminated,
-		PositionEndHeight: &endHeight,
-		NeutronAddress:    neutronAddress,
+		IsTerminated:            isTerminated,
+		PositionEndHeight:       endHeight,
+		WithdrawReceiverAddress: *neutronAddress,
 	}
 
 	return insert, update
