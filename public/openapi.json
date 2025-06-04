@@ -37,11 +37,11 @@
                     },
                     {
                         "in": "query",
-                        "name": "ethereum_address",
+                        "name": "owner_address",
                         "schema": {
                             "type": "string"
                         },
-                        "description": "Optional filter by ethereum address"
+                        "description": "Optional filter by owner ethereum address"
                     },
                     {
                         "in": "query",
@@ -49,7 +49,7 @@
                         "schema": {
                             "type": "integer"
                         },
-                        "description": "Starting position index for pagination"
+                        "description": "Starting position index for pagination (position_index_id)"
                     },
                     {
                         "in": "query",
@@ -69,7 +69,7 @@
                                 "desc"
                             ]
                         },
-                        "description": "Sort order"
+                        "description": "Sort order for position_index_id"
                     }
                 ],
                 "responses": {
@@ -86,22 +86,33 @@
                                                 "type": "object",
                                                 "properties": {
                                                     "id": {
-                                                        "type": "integer"
+                                                        "type": "integer",
+                                                        "description": "Position index ID"
                                                     },
                                                     "amount_shares": {
-                                                        "type": "string"
+                                                        "type": "string",
+                                                        "description": "Amount of shares in the position"
                                                     },
                                                     "position_start_height": {
-                                                        "type": "integer"
+                                                        "type": "integer",
+                                                        "description": "Block height when position was created"
                                                     },
                                                     "position_end_height": {
-                                                        "type": "integer"
+                                                        "type": "integer",
+                                                        "description": "Block height when position was closed (if applicable)"
                                                     },
-                                                    "ethereum_address": {
-                                                        "type": "string"
+                                                    "owner_address": {
+                                                        "type": "string",
+                                                        "description": "Ethereum address of the position owner"
+                                                    },
+                                                    "withdraw_reciever_address": {
+                                                        "type": "string",
+                                                        "description": "Ethereum address that will receive withdrawn funds"
                                                     },
                                                     "created_at": {
-                                                        "type": "string"
+                                                        "type": "string",
+                                                        "format": "date-time",
+                                                        "description": "Timestamp when the position was created"
                                                     }
                                                 }
                                             }
@@ -112,12 +123,25 @@
                         }
                     },
                     "400": {
-                        "description": "Invalid request parameters"
+                        "description": "Invalid request parameters",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string",
+                                            "description": "Error message describing what went wrong"
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         },
-        "/v1/vault/{vaultAddress}/withdrawRequestByAddress/{ethereumAddress}": {
+        "/v1/vault/{vaultAddress}/withdrawRequestByAddress/{ownerAddress}": {
             "get": {
                 "summary": "Get vault withdraw request by ethereum address",
                 "description": "Retrieves withdraw requests for a given ethereum address in a specific vault",
@@ -133,12 +157,12 @@
                     },
                     {
                         "in": "path",
-                        "name": "ethereumAddress",
+                        "name": "ownerAddress",
                         "required": true,
                         "schema": {
                             "type": "string"
                         },
-                        "description": "Ethereum address to get withdraw requests for"
+                        "description": "Owner address to get withdraw requests for"
                     },
                     {
                         "in": "query",
@@ -183,16 +207,28 @@
                                                 "type": "object",
                                                 "properties": {
                                                     "id": {
-                                                        "type": "integer"
+                                                        "type": "integer",
+                                                        "description": "Withdraw request ID"
                                                     },
                                                     "amount": {
-                                                        "type": "string"
+                                                        "type": "string",
+                                                        "description": "Amount to withdraw"
                                                     },
                                                     "created_at": {
-                                                        "type": "string"
+                                                        "type": "string",
+                                                        "description": "Timestamp of request creation"
                                                     },
-                                                    "neutron_address": {
-                                                        "type": "string"
+                                                    "owner_address": {
+                                                        "type": "string",
+                                                        "description": "Ethereum address of the request owner"
+                                                    },
+                                                    "reciever_address": {
+                                                        "type": "string",
+                                                        "description": "Ethereum address of the receiver"
+                                                    },
+                                                    "block_number": {
+                                                        "type": "integer",
+                                                        "description": "Block number when the request was created"
                                                     }
                                                 }
                                             }
@@ -203,7 +239,20 @@
                         }
                     },
                     "400": {
-                        "description": "Invalid request parameters"
+                        "description": "Invalid request parameters",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string",
+                                            "description": "Error message describing what went wrong"
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -228,7 +277,7 @@
                         "schema": {
                             "type": "integer"
                         },
-                        "description": "Starting withdraw request ID for pagination"
+                        "description": "Withdraw request ID to use as a cutoff point for pagination (inclusive)"
                     },
                     {
                         "in": "query",
@@ -236,7 +285,7 @@
                         "schema": {
                             "type": "integer"
                         },
-                        "description": "Number of records to return"
+                        "description": "Maximum number of records to return"
                     },
                     {
                         "in": "query",
@@ -248,7 +297,7 @@
                                 "desc"
                             ]
                         },
-                        "description": "Sort order"
+                        "description": "Sort order for the results"
                     }
                 ],
                 "responses": {
@@ -265,22 +314,28 @@
                                                 "type": "object",
                                                 "properties": {
                                                     "id": {
-                                                        "type": "integer"
+                                                        "type": "integer",
+                                                        "description": "Unique identifier of the withdraw request"
                                                     },
                                                     "amount": {
-                                                        "type": "string"
+                                                        "type": "string",
+                                                        "description": "Amount to be withdrawn"
                                                     },
                                                     "block_number": {
-                                                        "type": "integer"
+                                                        "type": "integer",
+                                                        "description": "Block number when the request was created"
                                                     },
                                                     "owner_address": {
-                                                        "type": "string"
+                                                        "type": "string",
+                                                        "description": "Address of the request owner"
                                                     },
                                                     "reciever_address": {
-                                                        "type": "string"
+                                                        "type": "string",
+                                                        "description": "Address that will receive the withdrawn funds"
                                                     },
                                                     "created_at": {
-                                                        "type": "string"
+                                                        "type": "string",
+                                                        "description": "Timestamp when the request was created"
                                                     }
                                                 }
                                             }
@@ -291,7 +346,7 @@
                         }
                     },
                     "400": {
-                        "description": "Invalid request parameters"
+                        "description": "Invalid request parameters or vault address"
                     }
                 }
             }

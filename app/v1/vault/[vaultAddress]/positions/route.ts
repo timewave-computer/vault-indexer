@@ -26,7 +26,7 @@ import { paginationSchema } from "@/app/types"
  *         name: from
  *         schema:
  *           type: integer
- *         description: Starting position index for pagination
+ *         description: Starting position index for pagination (position_index_id)
  *       - in: query
  *         name: limit
  *         schema:
@@ -37,7 +37,7 @@ import { paginationSchema } from "@/app/types"
  *         schema:
  *           type: string
  *           enum: [asc, desc]
- *         description: Sort order
+ *         description: Sort order for position_index_id
  *     responses:
  *       200:
  *         description: List of positions
@@ -53,20 +53,36 @@ import { paginationSchema } from "@/app/types"
  *                     properties:
  *                       id:
  *                         type: integer
+ *                         description: Position index ID
  *                       amount_shares:
  *                         type: string
+ *                         description: Amount of shares in the position
  *                       position_start_height:
  *                         type: integer
+ *                         description: Block height when position was created
  *                       position_end_height:
  *                         type: integer
+ *                         description: Block height when position was closed (if applicable)
  *                       owner_address:
  *                         type: string
+ *                         description: Ethereum address of the position owner
  *                       withdraw_reciever_address:
  *                         type: string
+ *                         description: Ethereum address that will receive withdrawn funds
  *                       created_at:
  *                         type: string
+ *                         format: date-time
+ *                         description: Timestamp when the position was created
  *       400:
  *         description: Invalid request parameters
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   description: Error message describing what went wrong
  */
 
 const querySchema = paginationSchema.extend({

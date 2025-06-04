@@ -15,18 +15,18 @@
  *         name: from
  *         schema:
  *           type: integer
- *         description: Starting withdraw request ID for pagination
+ *         description: Withdraw request ID to use as a cutoff point for pagination (inclusive)
  *       - in: query
  *         name: limit
  *         schema:
  *           type: integer
- *         description: Number of records to return
+ *         description: Maximum number of records to return
  *       - in: query
  *         name: order
  *         schema:
  *           type: string
  *           enum: [asc, desc]
- *         description: Sort order
+ *         description: Sort order for the results
  *     responses:
  *       200:
  *         description: List of withdraw requests
@@ -42,18 +42,24 @@
  *                     properties:
  *                       id:
  *                         type: integer
+ *                         description: Unique identifier of the withdraw request
  *                       amount:
  *                         type: string
+ *                         description: Amount to be withdrawn
  *                       block_number:
  *                         type: integer
+ *                         description: Block number when the request was created
  *                       owner_address:
  *                         type: string
+ *                         description: Address of the request owner
  *                       reciever_address:
  *                         type: string
+ *                         description: Address that will receive the withdrawn funds
  *                       created_at:
  *                         type: string
+ *                         description: Timestamp when the request was created
  *       400:
- *         description: Invalid request parameters
+ *         description: Invalid request parameters or vault address
  */
 
 import supabase from "@/app/supabase"

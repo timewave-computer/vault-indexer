@@ -53,14 +53,32 @@ import { paginationSchema } from "@/app/types"
  *                     properties:
  *                       id:
  *                         type: integer
+ *                         description: Withdraw request ID
  *                       amount:
  *                         type: string
+ *                         description: Amount to withdraw
  *                       created_at:
  *                         type: string
- *                       neutron_address:
+ *                         description: Timestamp of request creation
+ *                       owner_address:
  *                         type: string
+ *                         description: Ethereum address of the request owner
+ *                       reciever_address:
+ *                         type: string
+ *                         description: Ethereum address of the receiver
+ *                       block_number:
+ *                         type: integer
+ *                         description: Block number when the request was created
  *       400:
  *         description: Invalid request parameters
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   description: Error message describing what went wrong
  */
 
 const querySchema = paginationSchema
