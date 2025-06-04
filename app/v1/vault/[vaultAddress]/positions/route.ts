@@ -95,6 +95,7 @@ export async function GET(request: NextRequest,
 
 
     if (ethereum_address) {
+      if (!isAddress(ethereum_address)) {  throw new Error('Invalid ethereum address') }
       query.eq('ethereum_address', ethereum_address)
     }
     if (order === 'desc') {
