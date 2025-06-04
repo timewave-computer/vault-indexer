@@ -107,7 +107,7 @@ Visit the api at `localhost:3000/v1`
 ## Updating API schema
 The automated process fails in deployment, so this is a temporary approach.
 
-- visit `/gen-openapi.json` locally and copy static file
+- visit `/api-gen` locally and copy static file
 - paste in `public/openapi.json`
 
 
