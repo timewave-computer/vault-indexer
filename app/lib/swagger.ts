@@ -1,9 +1,12 @@
 import { createSwaggerSpec } from "next-swagger-doc";
+import path from "path";
+
+const apiFolder = path.join(process.cwd(), "/app/v1/");
+console.log('apiFolder',apiFolder);
 
 export const getApiDocs = async () => {
   const spec = createSwaggerSpec({
-    apiFolder: "app/(api)/v1/", // Updated to point to the actual API routes directory
-    apis: [`${__dirname}/routes/*.ts`],
+    apiFolder: "/app/v1/", // Use absolute path with process.cwd()
     definition: {
       openapi: "3.0.0",
       info: {
