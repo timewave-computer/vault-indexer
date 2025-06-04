@@ -180,10 +180,13 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 	return nil
 }
 
-func (p *PositionProcessor) processPositionEvent(event PositionEvent, senderPos *database.PublicPositionsSelect, receiverPos *database.PublicPositionsSelect, maxPositionIndexId int64) ([]database.PublicPositionsInsert, []database.PublicPositionsUpdate, error) {
+func (p *PositionProcessor) processPositionEvent(event PositionEvent,
+	senderPos *database.PublicPositionsSelect,
+	receiverPos *database.PublicPositionsSelect,
+	maxPositionIndexId int64) ([]PositionInsert, []PositionUpdate, error) {
 
-	var updates []database.PublicPositionsUpdate
-	var inserts []database.PublicPositionsInsert
+	var updates []PositionUpdate
+	var inserts []PositionInsert
 	positionIndexId := maxPositionIndexId
 
 	switch event.EventName {
@@ -215,16 +218,13 @@ func (p *PositionProcessor) processPositionEvent(event PositionEvent, senderPos 
 
 			// create a new position
 			positionIndexId++
-			inserts = append(inserts, database.PublicPositionsInsert{
-				PositionIndexId:         positionIndexId,
-				OwnerAddress:            receiverAddress,
-				ContractAddress:         event.Log.Address.Hex(),
-				AmountShares:            amount_shares,
-				PositionStartHeight:     int64(event.Log.BlockNumber),
-				PositionEndHeight:       nil,
-				IsTerminated:            nil, // this is only incrementing, can't be terminated
-				WithdrawReceiverAddress: nil,
-			})
+			inserts = append(inserts, ToPositionInsert(database.PublicPositionsInsert{
+				PositionIndexId:     positionIndexId,
+				OwnerAddress:        receiverAddress,
+				ContractAddress:     event.Log.Address.Hex(),
+				AmountShares:        amount_shares,
+				PositionStartHeight: int64(event.Log.BlockNumber),
+			}))
 
 		} else {
 			// update receiver position
@@ -293,7 +293,7 @@ func updatePosition(
 	isAddition bool,
 	neutronAddress *string,
 	maxPositionIndexId *int64,
-) (*database.PublicPositionsInsert, *database.PublicPositionsUpdate) {
+) (*PositionInsert, *PositionUpdate) {
 	if currentPosition == nil {
 		return nil, nil
 	}
@@ -305,30 +305,30 @@ func updatePosition(
 	// Check if the position should be terminated (either zero balance)
 	var isTerminated = newAmountShares == "0"
 
-	var insert *database.PublicPositionsInsert
-	var update *database.PublicPositionsUpdate
+	var insert PositionInsert
+	var update PositionUpdate
 
 	if !isTerminated {
 		*maxPositionIndexId++
-		insert = &database.PublicPositionsInsert{
+
+		insert = ToPositionInsert(database.PublicPositionsInsert{
 			OwnerAddress:        address,
 			ContractAddress:     currentPosition.ContractAddress,
 			AmountShares:        newAmountShares,
 			PositionStartHeight: int64(blockNumber),
 			PositionIndexId:     *maxPositionIndexId,
-		}
+		})
+
 	}
 
-	update = &database.PublicPositionsUpdate{
-		Id: currentPosition.Id,
+	update = ToPositionUpdate(database.PublicPositionsUpdate{
+		Id:                      &currentPosition.Id,
+		IsTerminated:            &isTerminated,
+		PositionEndHeight:       &endHeight,
+		WithdrawReceiverAddress: neutronAddress,
+	})
 
-		// new values
-		IsTerminated:            isTerminated,
-		PositionEndHeight:       endHeight,
-		WithdrawReceiverAddress: *neutronAddress,
-	}
-
-	return insert, update
+	return &insert, &update
 }
 
 func computeNewAmountShares(currentPosition *database.PublicPositionsSelect, newAmountShares string, isAddition bool) string {
@@ -363,4 +363,41 @@ func computeNewAmountShares(currentPosition *database.PublicPositionsSelect, new
 func (p *PositionProcessor) Stop() {
 	p.cancel()
 	p.wg.Wait()
+}
+
+type PositionUpdate struct {
+	Id                      string `json:"id"`
+	IsTerminated            bool   `json:"is_terminated"`
+	PositionEndHeight       int64  `json:"position_end_height"`
+	WithdrawReceiverAddress string `json:"withdraw_receiver_address"`
+}
+
+func ToPositionUpdate(u database.PublicPositionsUpdate) PositionUpdate {
+
+	// omits empty values so they are not attempted to be updated
+
+	return PositionUpdate{
+		Id:                      *u.Id,
+		IsTerminated:            *u.IsTerminated,
+		PositionEndHeight:       *u.PositionEndHeight,
+		WithdrawReceiverAddress: *u.WithdrawReceiverAddress,
+	}
+}
+
+type PositionInsert struct {
+	PositionIndexId     int64  `json:"position_index_id"`
+	OwnerAddress        string `json:"owner_address"`
+	ContractAddress     string `json:"contract_address"`
+	AmountShares        string `json:"amount_shares"`
+	PositionStartHeight int64  `json:"position_start_height"`
+}
+
+func ToPositionInsert(u database.PublicPositionsInsert) PositionInsert {
+	return PositionInsert{
+		PositionIndexId:     u.PositionIndexId,
+		OwnerAddress:        u.OwnerAddress,
+		ContractAddress:     u.ContractAddress,
+		AmountShares:        u.AmountShares,
+		PositionStartHeight: u.PositionStartHeight,
+	}
 }

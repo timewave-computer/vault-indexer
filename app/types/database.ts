@@ -41,6 +41,8 @@ export type Database = {
           created_at: string | null
           event_name: string
           id: string
+          is_processed: boolean | null
+          last_updated_at: string | null
           log_index: number
           raw_data: Json
           transaction_hash: string
@@ -51,6 +53,8 @@ export type Database = {
           created_at?: string | null
           event_name: string
           id?: string
+          is_processed?: boolean | null
+          last_updated_at?: string | null
           log_index: number
           raw_data: Json
           transaction_hash: string
@@ -61,6 +65,8 @@ export type Database = {
           created_at?: string | null
           event_name?: string
           id?: string
+          is_processed?: boolean | null
+          last_updated_at?: string | null
           log_index?: number
           raw_data?: Json
           transaction_hash?: string

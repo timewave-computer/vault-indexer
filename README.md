@@ -36,7 +36,7 @@ npx supabase gen types --lang typescript --local > app/types/database.ts
 
 ```
 
-### Clear database and apply migration
+### Clear database and apply migrationx
 ```bash
 npx supabase db reset
 ## remember to re-generate types
