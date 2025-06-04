@@ -46,15 +46,8 @@ func (e *EventProcessor) processEvent(vLog types.Log, event abi.Event, contractN
 		return fmt.Errorf("failed to process event: %w", err)
 	}
 
-	blockNumber, err := strconv.ParseInt(strconv.FormatInt(eventData.BlockNumber, 10), 10, 64)
-	if err != nil {
-		return fmt.Errorf("failed to parse block number: %w", err)
-	}
-
-	logIndex, err := strconv.ParseInt(strconv.FormatInt(int64(eventData.LogIndex), 10), 10, 64)
-	if err != nil {
-		return fmt.Errorf("failed to parse log index: %w", err)
-	}
+	blockNumber := eventData.BlockNumber
+	logIndex := int64(eventData.LogIndex)
 
 	data, _, err := e.db.From("events").
 		Select("id", "", false).
