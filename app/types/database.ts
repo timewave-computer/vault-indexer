@@ -114,7 +114,7 @@ export type Database = {
           created_at: string
           id: string
           owner_address: string
-          reciever_address: string
+          receiver_address: string
           withdraw_id: number
         }
         Insert: {
@@ -124,7 +124,7 @@ export type Database = {
           created_at?: string
           id?: string
           owner_address: string
-          reciever_address: string
+          receiver_address: string
           withdraw_id: number
         }
         Update: {
@@ -134,7 +134,7 @@ export type Database = {
           created_at?: string
           id?: string
           owner_address?: string
-          reciever_address?: string
+          receiver_address?: string
           withdraw_id?: number
         }
         Relationships: []

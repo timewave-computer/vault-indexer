@@ -63,7 +63,7 @@ import { paginationSchema } from "@/app/types"
  *                       owner_address:
  *                         type: string
  *                         description: Ethereum address of the request owner
- *                       reciever_address:
+ *                       receiver_address:
  *                         type: string
  *                         description: Ethereum address of the receiver
  *                       block_number:
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest,
       amount,
       created_at,
       owner_address,
-      reciever_address,
+      receiver_address,
       block_number
   `).eq('contract_address', vaultAddress)
     .eq('owner_address', ownerAddress)

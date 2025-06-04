@@ -69,7 +69,7 @@ type PublicWithdrawRequestsSelect struct {
 	CreatedAt       string `json:"created_at"`
 	Id              string `json:"id"`
 	OwnerAddress    string `json:"owner_address"`
-	RecieverAddress string `json:"reciever_address"`
+	RecieverAddress string `json:"receiver_address"`
 	WithdrawId      int64  `json:"withdraw_id"`
 }
 
@@ -78,7 +78,7 @@ type PublicWithdrawRequestsInsert struct {
 	BlockNumber     int64  `json:"block_number"`
 	ContractAddress string `json:"contract_address"`
 	OwnerAddress    string `json:"owner_address"`
-	RecieverAddress string `json:"reciever_address"`
+	RecieverAddress string `json:"receiver_address"`
 	WithdrawId      int64  `json:"withdraw_id"`
 }
 
@@ -89,6 +89,6 @@ type PublicWithdrawRequestsUpdate struct {
 	CreatedAt       *string `json:"created_at"`
 	Id              *string `json:"id"`
 	OwnerAddress    *string `json:"owner_address"`
-	RecieverAddress *string `json:"reciever_address"`
+	RecieverAddress *string `json:"receiver_address"`
 	WithdrawId      *int64  `json:"withdraw_id"`
 }

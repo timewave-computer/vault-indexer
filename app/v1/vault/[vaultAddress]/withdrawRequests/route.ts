@@ -52,7 +52,7 @@
  *                       owner_address:
  *                         type: string
  *                         description: Address of the request owner
- *                       reciever_address:
+ *                       receiver_address:
  *                         type: string
  *                         description: Address that will receive the withdrawn funds
  *                       created_at:
@@ -86,7 +86,7 @@ export async function GET(request: NextRequest,
       amount,
       block_number,
       owner_address,
-      reciever_address,
+      receiver_address,
       created_at
   `).eq('contract_address', vaultAddress)
     .limit(Number(limit))

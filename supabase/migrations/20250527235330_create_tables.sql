@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS withdraw_requests (
     block_number BIGINT NOT NULL,
     owner_address TEXT NOT NULL,
     amount TEXT NOT NULL,
-    reciever_address TEXT NOT NULL,
+    receiver_address TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_withdraw_requests_contract_address ON withdraw_requests(contract_address);
