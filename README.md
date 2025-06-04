@@ -93,9 +93,21 @@ Simple nextjs app to provide an API for the indexer database
 npm install
 ```
 
-2. start server
+2. copy `.env.example`
+- SUPABASE_URL: http url for postgres db
+- SUPABASE_ANON_KEY: read-only key
+- API_KEY: random string to give access to API
+
+3. start server
 ```bash
 npm run dev
 ```
 Visit the api at `localhost:3000/v1`
+
+## Updating API schema
+The automated process fails in deployment, so this is a temporary approach.
+
+- visit `/gen-openapi.json` locally and copy static file
+- paste in `public/openapi.json`
+
 
