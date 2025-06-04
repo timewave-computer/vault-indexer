@@ -56,10 +56,10 @@ type PublicPositionsInsert struct {
 }
 
 type PublicPositionsUpdate struct {
-	Id                      *string `json:"id"`
-	IsTerminated            *bool   `json:"is_terminated"`
-	PositionEndHeight       *int64  `json:"position_end_height"`
-	WithdrawReceiverAddress *string `json:"withdraw_receiver_address"`
+	Id                      string `json:"id"`
+	IsTerminated            bool   `json:"is_terminated"`
+	PositionEndHeight       int64  `json:"position_end_height"`
+	WithdrawReceiverAddress string `json:"withdraw_receiver_address"`
 }
 
 type PublicWithdrawRequestsSelect struct {
