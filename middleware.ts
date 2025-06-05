@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const API_KEY = process.env.API_KEY
+const API_KEY = process.env.API_AUTH_KEY
 
 if (!API_KEY) {
-  throw new Error('API_KEY is not set')
+  throw new Error('API_AUTH_KEY is not set')
 }
 
 export function middleware(request: NextRequest) {

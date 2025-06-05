@@ -12,6 +12,7 @@ import (
 	"github.com/supabase-community/postgrest-go"
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/database"
+	"github.com/timewave/vault-indexer/go-indexer/logger"
 )
 
 // Transformer handles processing of raw events into derived data
@@ -20,7 +21,7 @@ type Transformer struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
-	logger *Logger
+	logger *logger.Logger
 	// Add retry tracking
 	retryCount    int
 	maxRetries    int
@@ -48,7 +49,7 @@ func NewTransformer(db *supa.Client) *Transformer {
 		db:         db,
 		ctx:        ctx,
 		cancel:     cancel,
-		logger:     NewLogger("Transformer"),
+		logger:     logger.NewLogger("Transformer"),
 		maxRetries: 2,
 		lastError:  nil,
 		retryCount: 0,

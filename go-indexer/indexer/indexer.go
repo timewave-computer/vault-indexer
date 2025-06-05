@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/config"
+	"github.com/timewave/vault-indexer/go-indexer/logger"
 )
 
 // Indexer handles blockchain event indexing and position tracking
@@ -33,7 +34,7 @@ type Indexer struct {
 	eventProcessor *EventProcessor
 	transformer    *Transformer
 	wg             sync.WaitGroup
-	logger         *Logger
+	logger         *logger.Logger
 }
 
 func New(cfg *config.Config) (*Indexer, error) {
@@ -72,7 +73,7 @@ func New(cfg *config.Config) (*Indexer, error) {
 		// withdrawProcessor: withdrawProcessor,
 		eventProcessor: eventProcessor,
 		transformer:    transformer,
-		logger:         NewLogger("Indexer"),
+		logger:         logger.NewLogger("Indexer"),
 	}, nil
 }
 
