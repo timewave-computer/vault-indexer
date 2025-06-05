@@ -86,9 +86,14 @@ func (t *Transformer) Start() error {
 					t.handleError(err)
 					continue
 				}
+
 				if len(response) == 0 {
 					t.logger.Printf("No events found, waiting 15 seconds")
-					time.Sleep(15 * time.Second)
+					select {
+					case <-time.After(15 * time.Second):
+					case <-t.ctx.Done():
+						return
+					}
 					continue
 				}
 
@@ -151,7 +156,11 @@ func (t *Transformer) handleError(err error) {
 		t.retryCount, t.maxRetries, err, backoff)
 
 	t.lastErrorTime = &now
-	time.Sleep(backoff)
+	select {
+	case <-time.After(backoff):
+	case <-t.ctx.Done():
+		return
+	}
 }
 
 // Stop gracefully stops the transformer

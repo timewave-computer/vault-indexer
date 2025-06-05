@@ -96,11 +96,6 @@ func (i *Indexer) Start() error {
 		}
 	}
 
-	// Start transformer after historical ingestion
-	if err := i.transformer.Start(); err != nil {
-		return fmt.Errorf("failed to start transformer: %w", err)
-	}
-
 	i.logger.Printf("Listening to event subscriptions for %d contracts...", len(i.config.Contracts))
 	// set up event subscriptions for all contracts
 	for _, contract := range i.config.Contracts {
@@ -108,6 +103,11 @@ func (i *Indexer) Start() error {
 			// will subscribe to events for all contracts and begin recording them
 			return fmt.Errorf("failed to set up event subscriptions for contract %s: %w", contract.Name, err)
 		}
+	}
+
+	// Start transformer after historical ingestion
+	if err := i.transformer.Start(); err != nil {
+		return fmt.Errorf("failed to start transformer: %w", err)
 	}
 
 	return nil
