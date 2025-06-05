@@ -76,6 +76,12 @@ go mod tidy
 ./start-indexer.sh prod
 ```
 
+###
+Run with nix
+```bash
+nix run .#indexer
+```
+
 ## Testing
 ```bash
 go test ./...  
