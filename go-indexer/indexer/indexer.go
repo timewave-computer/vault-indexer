@@ -21,17 +21,19 @@ import (
 
 // Indexer handles blockchain event indexing and position tracking
 type Indexer struct {
-	config            *config.Config
-	client            *ethclient.Client
-	db                *supa.Client
-	ctx               context.Context
-	cancel            context.CancelFunc
-	positionChan      chan PositionEvent
-	withdrawChan      chan WithdrawRequestEvent
-	positionProcessor *PositionProcessor
-	withdrawProcessor *WithdrawProcessor
-	eventProcessor    *EventProcessor
-	wg                sync.WaitGroup
+	config *config.Config
+	client *ethclient.Client
+	db     *supa.Client
+	ctx    context.Context
+	cancel context.CancelFunc
+	// positionChan      chan PositionEvent
+	// withdrawChan      chan WithdrawRequestEvent
+	// positionProcessor *PositionProcessor
+	// withdrawProcessor *WithdrawProcessor
+	eventProcessor *EventProcessor
+	transformer    *Transformer
+	wg             sync.WaitGroup
+	logger         *Logger
 }
 
 func New(cfg *config.Config) (*Indexer, error) {
@@ -52,36 +54,39 @@ func New(cfg *config.Config) (*Indexer, error) {
 
 	// Create processors
 	eventProcessor := NewEventProcessor(db, client)
-	positionChan := make(chan PositionEvent, 1000)        // Buffer size of 1000 events
-	withdrawChan := make(chan WithdrawRequestEvent, 1000) // Buffer size of 1000 events
-	positionProcessor := NewPositionProcessor(db)
-	withdrawProcessor := NewWithdrawProcessor(db)
+	// positionChan := make(chan PositionEvent, 1000)        // Buffer size of 1000 events
+	// withdrawChan := make(chan WithdrawRequestEvent, 1000) // Buffer size of 1000 events
+	// positionProcessor := NewPositionProcessor(db)
+	// withdrawProcessor := NewWithdrawProcessor(db)
+	transformer := NewTransformer(db)
 
 	return &Indexer{
-		config:            cfg,
-		client:            client,
-		db:                db,
-		ctx:               ctx,
-		cancel:            cancel,
-		positionChan:      positionChan,
-		withdrawChan:      withdrawChan,
-		positionProcessor: positionProcessor,
-		withdrawProcessor: withdrawProcessor,
-		eventProcessor:    eventProcessor,
+		config: cfg,
+		client: client,
+		db:     db,
+		ctx:    ctx,
+		cancel: cancel,
+		// positionChan:      positionChan,
+		// withdrawChan:      withdrawChan,
+		// positionProcessor: positionProcessor,
+		// withdrawProcessor: withdrawProcessor,
+		eventProcessor: eventProcessor,
+		transformer:    transformer,
+		logger:         NewLogger("Indexer"),
 	}, nil
 }
 
 func (i *Indexer) Start() error {
-	log.Println("Starting indexer...")
+	i.logger.Println("Starting indexer...")
 
 	// Perform health check by getting current block height
 	blockNumber, err := i.client.BlockNumber(i.ctx)
 	if err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}
-	log.Printf("Health check successful - Current block height: %d", blockNumber)
+	i.logger.Printf("Health check successful - Current block height: %d", blockNumber)
 
-	log.Printf("Processing historical events for %d contracts...", len(i.config.Contracts))
+	i.logger.Printf("Processing historical events for %d contracts...", len(i.config.Contracts))
 
 	// Process historical events for each contract
 	for _, contract := range i.config.Contracts {
@@ -91,9 +96,12 @@ func (i *Indexer) Start() error {
 		}
 	}
 
-	// TODO: once finished, start transformation processor
+	// Start transformer after historical ingestion
+	if err := i.transformer.Start(); err != nil {
+		return fmt.Errorf("failed to start transformer: %w", err)
+	}
 
-	log.Printf("Listening to event subscriptions for %d contracts...", len(i.config.Contracts))
+	i.logger.Printf("Listening to event subscriptions for %d contracts...", len(i.config.Contracts))
 	// set up event subscriptions for all contracts
 	for _, contract := range i.config.Contracts {
 		if err := i.setupEventSubscriptions(contract); err != nil {
@@ -101,16 +109,6 @@ func (i *Indexer) Start() error {
 			return fmt.Errorf("failed to set up event subscriptions for contract %s: %w", contract.Name, err)
 		}
 	}
-
-	// // Start position processor
-	// if err := i.positionProcessor.Start(i.positionChan); err != nil {
-	// 	return fmt.Errorf("failed to start position processor: %w", err)
-	// }
-
-	// // Start withdraw processor
-	// if err := i.withdrawProcessor.Start(i.withdrawChan); err != nil {
-	// 	return fmt.Errorf("failed to start withdraw processor: %w", err)
-	// }
 
 	return nil
 }
@@ -230,22 +228,23 @@ func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error 
 }
 
 func (i *Indexer) Stop() error {
-	log.Println("Stopping indexer...")
+	i.logger.Println("Stopping indexer...")
 
 	// signal writers to stop
 	i.cancel()
 
 	// close channels so the reader goroutines can exit gracefully
-	close(i.positionChan)
-	close(i.withdrawChan)
+	// close(i.positionChan)
+	// close(i.withdrawChan)
 
 	// wait until all goroutines finish
 	i.wg.Wait()
 
 	// stop processors
-	i.positionProcessor.Stop()
-	i.withdrawProcessor.Stop()
+	// i.positionProcessor.Stop()
+	// i.withdrawProcessor.Stop()
 	i.eventProcessor.Stop()
+	i.transformer.Stop()
 
 	// finally release external resources
 	i.client.Close()
