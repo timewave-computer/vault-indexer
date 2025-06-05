@@ -35,8 +35,8 @@ schema = 3
     version = "v1.0.0"
     hash = "sha256-jyqnqoZ3Ogpi5M7778F3ferfYFqR9vEaRESTakhb8Yw="
   [mod."github.com/ethereum/go-ethereum"]
-    version = "v1.14.10"
-    hash = "sha256-mXn7eYKf6AW3fD8AFKJPmoSjazFN3Ro0mbcPVAV2V4I="
+    version = "v1.13.10"
+    hash = "sha256-UAWW/YyDKQG9Gjm2gNMRPwPnKChnYSCxRBPXhX7FPUE="
   [mod."github.com/fsnotify/fsnotify"]
     version = "v1.7.0"
     hash = "sha256-MdT2rQyQHspPJcx6n9ozkLbsktIOJutOqDuKpNAtoZY="
