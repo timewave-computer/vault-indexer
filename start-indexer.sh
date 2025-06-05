@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Default to dev environment if not specified
-ENV=${1:-dev}
+ENV=${1:-local}
 
 # Validate environment
-if [[ "$ENV" != "dev" && "$ENV" != "prod" ]]; then
-    echo "Error: Environment must be either 'dev' or 'prod'"
+if [[ "$ENV" != "local" && "$ENV" != "prod" ]]; then
+    echo "Error: Environment must be either 'local' or 'prod'"
     exit 1
 fi
 

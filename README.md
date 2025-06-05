@@ -3,7 +3,7 @@ The project has 3 parts
 - Postgres DB - schema defined in `supabase` hosted by supabase, uses some of their tools
 - Indexer "ETL" go code in `go-indexer` - long-running server that
     - connects to an ethereum node
-    - reads events for specific contracts (configured in `indexer-config`)
+    - reads events for specific contracts (configured in `config`)
     - write events to DB
     - transforms events into data required for the app (accounts, positions, etc)
 - Next JS API app in `app` - easy way to host the API. reads from the same schema. Deployed on vercel.
@@ -49,8 +49,6 @@ npx supabase stop --no-backup ## drops DB
 docker stop $(docker ps -a -q)
 docker rm $(docker ps -a -q)
 docker network prune
-
-
 ```
 
 ## Indexer
@@ -65,7 +63,7 @@ docker network prune
 go mod tidy
 ```
 
-2. set config in `indexer-config/config.dev.toml`
+2. set config in `go-indexer/config/config.yaml`
 - add contracts info + abis
 - check supabase local studio (http://127.0.0.1:54323) for anon key and connection string
 

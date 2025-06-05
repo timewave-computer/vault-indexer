@@ -1,0 +1,20 @@
+ethereum:
+  chain_id: 1
+
+contracts:
+    - name: "Vault"
+      address: "0xf2B85C389A771035a9Bd147D4BF87987A7F9cf98"
+      start_block: 22577826
+      abi_path: "vault.abi.json"
+      events:
+        - "Deposit"
+        - "Transfer"
+        - "WithdrawRequested"
+    - name: "Vault2"
+      address: "0x0B3B3a2C11D6676816fe214B7F23446D12D762FF"
+      start_block: 22634425
+      abi_path: "vault.abi.json"
+      events:
+        - "Deposit"
+        - "Transfer"
+        - "WithdrawRequested"

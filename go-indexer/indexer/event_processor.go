@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/database"
+	"github.com/timewave/vault-indexer/go-indexer/logger"
 )
 
 // EventProcessor handles blockchain event processing and storage
@@ -21,7 +22,7 @@ type EventProcessor struct {
 	client *ethclient.Client
 	ctx    context.Context
 	cancel context.CancelFunc
-	logger *Logger
+	logger *logger.Logger
 }
 
 // NewEventProcessor creates a new event processor
@@ -32,7 +33,7 @@ func NewEventProcessor(db *supa.Client, client *ethclient.Client) *EventProcesso
 		client: client,
 		ctx:    ctx,
 		cancel: cancel,
-		logger: NewLogger("EventProcessor"),
+		logger: logger.NewLogger("EventProcessor"),
 	}
 }
 

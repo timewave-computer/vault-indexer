@@ -1,8 +1,4 @@
 # INDEXER
-## Ignore all files in config/ directory
-indexer-config/*
-## But don't ignore config.env.yaml
-!indexer-config/config.env.yaml
 
 
 

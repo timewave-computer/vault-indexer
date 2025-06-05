@@ -6,6 +6,7 @@ toolchain go1.23.5
 
 require (
 	github.com/ethereum/go-ethereum v1.13.10
+	github.com/joho/godotenv v1.5.1
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.8.4
 	github.com/supabase-community/postgrest-go v0.0.11
