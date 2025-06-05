@@ -373,9 +373,7 @@ type PositionUpdate struct {
 }
 
 func ToPositionUpdate(u database.PublicPositionsUpdate) PositionUpdate {
-
 	// omits empty values so they are not attempted to be updated
-
 	return PositionUpdate{
 		Id:                      *u.Id,
 		IsTerminated:            *u.IsTerminated,
