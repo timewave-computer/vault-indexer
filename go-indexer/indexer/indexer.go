@@ -59,7 +59,12 @@ func New(cfg *config.Config) (*Indexer, error) {
 	// withdrawChan := make(chan WithdrawRequestEvent, 1000) // Buffer size of 1000 events
 	// positionProcessor := NewPositionProcessor(db)
 	// withdrawProcessor := NewWithdrawProcessor(db)
-	transformer := NewTransformer(db)
+
+	transformer, err := NewTransformer(db)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to create transformer: %w", err)
+	}
 
 	return &Indexer{
 		config: cfg,
