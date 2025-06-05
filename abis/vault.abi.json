@@ -899,6 +899,11 @@
                 "internalType": "address"
             },
             {
+                "name": "isReceiverContract",
+                "type": "bool",
+                "internalType": "bool"
+            },
+            {
                 "name": "redemptionRate",
                 "type": "uint256",
                 "internalType": "uint256"

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/big"
 	"strconv"
 
@@ -22,6 +21,7 @@ type EventProcessor struct {
 	client *ethclient.Client
 	ctx    context.Context
 	cancel context.CancelFunc
+	logger *Logger
 }
 
 // NewEventProcessor creates a new event processor
@@ -32,6 +32,7 @@ func NewEventProcessor(db *supa.Client, client *ethclient.Client) *EventProcesso
 		client: client,
 		ctx:    ctx,
 		cancel: cancel,
+		logger: NewLogger("EventProcessor"),
 	}
 }
 
@@ -40,7 +41,6 @@ func (e *EventProcessor) Stop() {
 }
 
 func (e *EventProcessor) processEvent(vLog types.Log, event abi.Event, contractName string) error {
-
 	eventData, err := parseEvent(vLog, event, contractName)
 	if err != nil {
 		return fmt.Errorf("failed to process event: %w", err)
@@ -67,7 +67,7 @@ func (e *EventProcessor) processEvent(vLog types.Log, event abi.Event, contractN
 
 	if len(response) > 0 {
 		eventId := response[0].Id
-		log.Printf("Updating existing event: %v", eventId)
+		e.logger.Printf("Updating existing event: %v", eventId)
 
 		now := "now()"
 		_, _, err = e.db.From("events").Update(ToEventIngestionUpdate(database.PublicEventsUpdate{
@@ -85,7 +85,6 @@ func (e *EventProcessor) processEvent(vLog types.Log, event abi.Event, contractN
 			return fmt.Errorf("failed to insert event into database: %w", err)
 		}
 		return nil
-
 	}
 }
 
