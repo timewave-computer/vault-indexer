@@ -127,13 +127,17 @@ func (p *PositionTransformer) computeTransfer(args ProcessPosition, senderPositi
 	} else {
 
 		// update receiver position
-		insert, update := updatePosition(UpdatePositionInput{
+		insert, update, err := updatePosition(UpdatePositionInput{
 			CurrentPosition: receiverPosition,
 			Address:         args.ReceiverAddress,
 			AmountShares:    args.AmountShares,
 			BlockNumber:     args.BlockNumber,
 			IsAddition:      true,
 		}, &positionIndexId)
+		if err != nil {
+			log.Printf("error updating position: %v", err)
+			return inserts, updates, err
+		}
 		if update != nil {
 			updates = append(updates, *update)
 		}
@@ -146,18 +150,21 @@ func (p *PositionTransformer) computeTransfer(args ProcessPosition, senderPositi
 	var isTransfer = args.SenderAddress != ZERO_ADDRESS.Hex() && args.ReceiverAddress != ZERO_ADDRESS.Hex()
 
 	if isTransfer && senderPosition == nil {
-		if senderPosition == nil {
-			return inserts, updates, ErrPositionNotFound
-		}
+		return inserts, updates, ErrPositionNotFound
+
 	} else {
 		// update sender position
-		insert, update := updatePosition(UpdatePositionInput{
+		insert, update, err := updatePosition(UpdatePositionInput{
 			CurrentPosition: senderPosition,
 			Address:         args.SenderAddress,
 			AmountShares:    args.AmountShares,
 			BlockNumber:     args.BlockNumber,
 			IsAddition:      false,
 		}, &positionIndexId)
+		if err != nil {
+			log.Printf("error updating position: %v", err)
+			return inserts, updates, err
+		}
 		if update != nil {
 			updates = append(updates, *update)
 		}
@@ -175,7 +182,7 @@ func (p *PositionTransformer) computeWithdraw(args ProcessPosition, senderPositi
 	log.Printf("computing withdraw. args: %v", args)
 
 	// update sender position
-	insert, update := updatePosition(UpdatePositionInput{
+	insert, update, err := updatePosition(UpdatePositionInput{
 		CurrentPosition:         senderPosition,
 		Address:                 args.SenderAddress,
 		AmountShares:            args.AmountShares,
@@ -183,6 +190,10 @@ func (p *PositionTransformer) computeWithdraw(args ProcessPosition, senderPositi
 		IsAddition:              false,
 		WithdrawReceiverAddress: &args.ReceiverAddress,
 	}, &positionIndexId)
+	if err != nil {
+		log.Printf("error updating position: %v", err)
+		return inserts, updates, err
+	}
 
 	if update != nil {
 		log.Printf("got update: %v", *update)
@@ -209,10 +220,10 @@ type UpdatePositionInput struct {
 func updatePosition(
 	input UpdatePositionInput,
 	positionIndexId *int64,
-) (*database.PositionInsert, *database.PositionUpdate) {
+) (*database.PositionInsert, *database.PositionUpdate, error) {
 
 	if input.CurrentPosition == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	log.Printf("updating position. currentPosition: %v, address: %v, amountShares: %v, blockNumber: %v, isAddition: %v, withdrawReceiverAddress: %v", *input.CurrentPosition, input.Address, input.AmountShares, input.BlockNumber, input.IsAddition, input.WithdrawReceiverAddress)
@@ -220,7 +231,7 @@ func updatePosition(
 	newAmountShares, err := computeNewAmountShares(input.CurrentPosition, input.AmountShares, input.IsAddition)
 	if err != nil {
 		log.Printf("error computing new amount shares: %v", err)
-		return nil, nil
+		return nil, nil, err
 	}
 
 	endHeight := int64(input.BlockNumber - 1)
@@ -261,7 +272,7 @@ func updatePosition(
 		WithdrawReceiverAddress: &receiverAddress,
 	})
 
-	return insert, &update
+	return insert, &update, nil
 }
 
 func computeNewAmountShares(currentPosition *database.PublicPositionsSelect, newAmountShares string, isAddition bool) (string, error) {

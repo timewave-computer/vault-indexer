@@ -46,7 +46,7 @@ import { paginationSchema } from "@/app/types"
  *                     properties:
  *                       id:
  *                         type: integer
- *                       ethereum_address:
+ *                       address:
  *                         type: string
  *                       created_at:
  *                         type: string

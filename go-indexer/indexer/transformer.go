@@ -5,13 +5,12 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strconv"
 	"sync"
 	"time"
-
-	"errors"
 
 	_ "github.com/lib/pq" // Import PostgreSQL driver
 	supa "github.com/supabase-community/supabase-go"
@@ -52,16 +51,8 @@ func (e manualError) Is(target error) bool {
 }
 
 // NewTransformer creates a new transformer instance
-func NewTransformer(db *supa.Client) (*Transformer, error) {
+func NewTransformer(supa *supa.Client, pgdb *sql.DB) (*Transformer, error) {
 	ctx, cancel := context.WithCancel(context.Background())
-
-	pgConnStr := "postgresql://postgres:postgres@127.0.0.1:54322/postgres?sslmode=disable"
-	// Open PostgreSQL connection
-	pgdb, err := sql.Open("postgres", pgConnStr)
-	if err != nil {
-		cancel()
-		return nil, err
-	}
 
 	// Configure connection pool
 	pgdb.SetMaxOpenConns(1)
@@ -74,7 +65,7 @@ func NewTransformer(db *supa.Client) (*Transformer, error) {
 	}
 
 	return &Transformer{
-		db:                  db,
+		db:                  supa,
 		pgdb:                pgdb,
 		ctx:                 ctx,
 		cancel:              cancel,
@@ -82,7 +73,7 @@ func NewTransformer(db *supa.Client) (*Transformer, error) {
 		maxRetries:          0,
 		lastError:           nil,
 		retryCount:          0,
-		positionTransformer: positionTransformer.NewPositionTransformer(db),
+		positionTransformer: positionTransformer.NewPositionTransformer(supa),
 	}, nil
 }
 
@@ -171,7 +162,6 @@ func (t *Transformer) Start() error {
 						t.logger.Printf("Error computing transformation: %v", err)
 						tx.Rollback()
 						t.handleError(err)
-						continue
 					}
 
 					for _, insert := range inserts {
@@ -181,9 +171,11 @@ func (t *Transformer) Start() error {
 							t.logger.Printf("Error inserting position: %v", err)
 							tx.Rollback()
 							t.handleError(err)
-							continue
+							break
 						}
+
 					}
+
 					for _, update := range updates {
 						t.logger.Printf("Updating position: %v", update)
 						err = t.updateTable(tx, "positions", update)
@@ -191,7 +183,7 @@ func (t *Transformer) Start() error {
 							t.logger.Printf("Error updating position: %v", err)
 							tx.Rollback()
 							t.handleError(err)
-							continue
+							break
 						}
 					}
 
@@ -297,22 +289,17 @@ func (t *Transformer) updateTable(tx *sql.Tx, table string, data any) error {
 	return nil
 }
 
-func UpdateEvent(db *sql.DB, insert database.PublicEventsUpdate) error {
-	query, args, err := dbutil.BuildInsert("events", insert)
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(query, args...)
-	return err
-}
-
 func ptr[T any](v T) *T {
 	return &v
 }
 
 func parseQuotedBased64Json(event database.PublicEventsSelect) (map[string]interface{}, error) {
 
-	base64string := string(event.RawData.([]uint8))
+	rawBytes, ok := event.RawData.([]uint8)
+	if !ok {
+		return nil, fmt.Errorf("raw data is not of type []uint8")
+	}
+	base64string := string(rawBytes)
 	unquoted, err := strconv.Unquote(base64string)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unquote raw data: %w", err)
