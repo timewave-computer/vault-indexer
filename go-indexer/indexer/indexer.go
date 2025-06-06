@@ -55,10 +55,6 @@ func New(cfg *config.Config) (*Indexer, error) {
 
 	// Create processors
 	eventProcessor := NewEventProcessor(db, client)
-	// positionChan := make(chan PositionEvent, 1000)        // Buffer size of 1000 events
-	// withdrawChan := make(chan WithdrawRequestEvent, 1000) // Buffer size of 1000 events
-	// positionProcessor := NewPositionProcessor(db)
-	// withdrawProcessor := NewWithdrawProcessor(db)
 
 	transformer, err := NewTransformer(db)
 	if err != nil {
@@ -67,15 +63,11 @@ func New(cfg *config.Config) (*Indexer, error) {
 	}
 
 	return &Indexer{
-		config: cfg,
-		client: client,
-		db:     db,
-		ctx:    ctx,
-		cancel: cancel,
-		// positionChan:      positionChan,
-		// withdrawChan:      withdrawChan,
-		// positionProcessor: positionProcessor,
-		// withdrawProcessor: withdrawProcessor,
+		config:         cfg,
+		client:         client,
+		db:             db,
+		ctx:            ctx,
+		cancel:         cancel,
 		eventProcessor: eventProcessor,
 		transformer:    transformer,
 		logger:         logger.NewLogger("Indexer"),
@@ -239,16 +231,9 @@ func (i *Indexer) Stop() error {
 	// signal writers to stop
 	i.cancel()
 
-	// close channels so the reader goroutines can exit gracefully
-	// close(i.positionChan)
-	// close(i.withdrawChan)
-
 	// wait until all goroutines finish
 	i.wg.Wait()
 
-	// stop processors
-	// i.positionProcessor.Stop()
-	// i.withdrawProcessor.Stop()
 	i.eventProcessor.Stop()
 	i.transformer.Stop()
 

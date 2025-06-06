@@ -3,7 +3,11 @@ package indexer
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"math/rand"
+	"strconv"
 	"sync"
 	"time"
 
@@ -14,16 +18,19 @@ import (
 	"github.com/timewave/vault-indexer/go-indexer/database"
 	"github.com/timewave/vault-indexer/go-indexer/dbutil"
 	"github.com/timewave/vault-indexer/go-indexer/logger"
+	positionTransformer "github.com/timewave/vault-indexer/go-indexer/transformer"
 )
 
 // Transformer handles processing of raw events into derived data
 type Transformer struct {
-	db     *supa.Client
-	pgdb   *sql.DB
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
-	logger *logger.Logger
+	db                  *supa.Client
+	pgdb                *sql.DB
+	ctx                 context.Context
+	cancel              context.CancelFunc
+	wg                  sync.WaitGroup
+	logger              *logger.Logger
+	positionTransformer *positionTransformer.PositionTransformer
+
 	// Add retry tracking
 	retryCount    int
 	maxRetries    int
@@ -67,14 +74,15 @@ func NewTransformer(db *supa.Client) (*Transformer, error) {
 	}
 
 	return &Transformer{
-		db:         db,
-		pgdb:       pgdb,
-		ctx:        ctx,
-		cancel:     cancel,
-		logger:     logger.NewLogger("Transformer"),
-		maxRetries: 1,
-		lastError:  nil,
-		retryCount: 0,
+		db:                  db,
+		pgdb:                pgdb,
+		ctx:                 ctx,
+		cancel:              cancel,
+		logger:              logger.NewLogger("Transformer"),
+		maxRetries:          0,
+		lastError:           nil,
+		retryCount:          0,
+		positionTransformer: positionTransformer.NewPositionTransformer(db),
 	}, nil
 }
 
@@ -97,7 +105,7 @@ func (t *Transformer) Start() error {
 					 FROM events 
 					WHERE is_processed IS NULL 
 					ORDER BY block_number ASC, log_index ASC 
-					LIMIT 2
+					LIMIT 1
 				`)
 				if err != nil {
 					t.handleError(err)
@@ -141,13 +149,14 @@ func (t *Transformer) Start() error {
 
 				// Process each event in its own transaction
 				for _, event := range events {
-					t.logger.Printf("Processing event: %v", event)
 
 					// Start a new transaction for each event
+					t.logger.Printf("Starting transaction for event: %v", event.Id)
 					tx, err := t.pgdb.BeginTx(t.ctx, &sql.TxOptions{
 						Isolation: sql.LevelReadCommitted,
 					})
 					if err != nil {
+						t.logger.Printf("Error starting transaction: %v", err)
 						t.handleError(err)
 						continue
 					}
@@ -157,31 +166,52 @@ func (t *Transformer) Start() error {
 						IsProcessed: ptr(true),
 					}
 
-					query, args, err := dbutil.BuildUpdate("events", eventUpdate, []string{"id"})
+					inserts, updates, err := t.computeTransformation(event)
 					if err != nil {
+						t.logger.Printf("Error computing transformation: %v", err)
 						tx.Rollback()
 						t.handleError(err)
 						continue
 					}
 
-					_, err = tx.ExecContext(t.ctx, query, args...)
+					for _, insert := range inserts {
+						t.logger.Printf("Inserting position: %v", insert)
+						err = t.insertTable(tx, "positions", insert)
+						if err != nil {
+							t.logger.Printf("Error inserting position: %v", err)
+							tx.Rollback()
+							t.handleError(err)
+							continue
+						}
+					}
+					for _, update := range updates {
+						t.logger.Printf("Updating position: %v", update)
+						err = t.updateTable(tx, "positions", update)
+						if err != nil {
+							t.logger.Printf("Error updating position: %v", err)
+							tx.Rollback()
+							t.handleError(err)
+							continue
+						}
+					}
+
+					err = t.updateTable(tx, "events", eventUpdate)
 					if err != nil {
+						t.logger.Printf("Error updating event: %v", err)
 						tx.Rollback()
 						t.handleError(err)
 						continue
 					}
 
-					// Commit the transaction
+					t.logger.Printf("Committing transaction for event: %v", event.Id)
 					if err := tx.Commit(); err != nil {
+						t.logger.Printf("Error committing transaction: %v", err)
 						t.handleError(err)
 						continue
 					}
+					t.logger.Printf("Successfully committed transaction for event: %v", event.Id)
 
 				}
-
-				t.handleError(manualError("end after first few events"))
-				// TODO: REMOVE!!
-				continue
 
 				// Reset retry count on successful operation
 				t.retryCount = 0
@@ -235,6 +265,38 @@ func (t *Transformer) Stop() {
 	}
 }
 
+func (t *Transformer) insertTable(tx *sql.Tx, table string, data any) error {
+	t.logger.Printf("building insert")
+	query, args, err := dbutil.BuildInsert(table, data)
+	if err != nil {
+		return err
+	}
+	t.logger.Printf("executing insert: %v", query)
+	res, err := tx.Exec(query, args...)
+	t.logger.Printf("insert error: %v", err)
+	if err != nil {
+		return err
+	}
+	t.logger.Printf("insert result: %v", res)
+	return nil
+}
+
+func (t *Transformer) updateTable(tx *sql.Tx, table string, data any) error {
+	t.logger.Printf("building update")
+	query, args, err := dbutil.BuildUpdate(table, data, []string{"id"})
+	if err != nil {
+		return err
+	}
+	t.logger.Printf("executing update: %v", query)
+	res, err := tx.Exec(query, args...)
+	t.logger.Printf("update error: %v", err)
+	if err != nil {
+		return err
+	}
+	t.logger.Printf("update result: %v", res)
+	return nil
+}
+
 func UpdateEvent(db *sql.DB, insert database.PublicEventsUpdate) error {
 	query, args, err := dbutil.BuildInsert("events", insert)
 	if err != nil {
@@ -246,4 +308,100 @@ func UpdateEvent(db *sql.DB, insert database.PublicEventsUpdate) error {
 
 func ptr[T any](v T) *T {
 	return &v
+}
+
+func parseQuotedBased64Json(event database.PublicEventsSelect) (map[string]interface{}, error) {
+
+	base64string := string(event.RawData.([]uint8))
+	unquoted, err := strconv.Unquote(base64string)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unquote raw data: %w", err)
+	}
+
+	decodedBytes, err := base64.StdEncoding.DecodeString(unquoted)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode base64: %w", err)
+	}
+	var data map[string]interface{}
+	if err := json.Unmarshal(decodedBytes, &data); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal raw data: %w", err)
+	}
+	return data, nil
+
+}
+
+func (t *Transformer) computeTransformation(event database.PublicEventsSelect) ([]database.PositionInsert, []database.PositionUpdate, error) {
+
+	var eventData, err = parseQuotedBased64Json(event)
+	if err != nil {
+		return nil, nil, err
+	}
+	t.logger.Printf("NEW: %v %v eventData: %v", event.ContractAddress, event.EventName, eventData)
+
+	if event.EventName == "Transfer" {
+
+		var senderAddress string
+		var receiverAddress string
+
+		if to, ok := eventData["to"].(string); ok {
+			receiverAddress = to
+		} else {
+			return nil, nil, errors.New("to not found")
+		}
+		if from, ok := eventData["from"].(string); ok {
+			senderAddress = from
+		} else {
+			return nil, nil, errors.New("from not found")
+		}
+
+		var amountShares = fmt.Sprintf("%.0f", eventData["value"])
+
+		inserts, updates, err := t.positionTransformer.ProcessPositionTransformation(positionTransformer.ProcessPosition{
+			ReceiverAddress: receiverAddress,
+			SenderAddress:   senderAddress,
+			ContractAddress: event.ContractAddress,
+			AmountShares:    amountShares,
+			BlockNumber:     uint64(event.BlockNumber),
+		}, false)
+		t.logger.Printf("inserts: %v", inserts)
+		t.logger.Printf("updates: %v", updates)
+
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return inserts, updates, nil
+
+	} else if event.EventName == "WithdrawRequested" {
+
+		var senderAddress string
+		var receiverAddress string
+
+		if from, ok := eventData["owner"].(string); ok {
+			senderAddress = from
+		}
+		if to, ok := eventData["receiver"].(string); ok {
+			receiverAddress = to
+		}
+
+		// Handle value that could be either string or numeric
+		var amountShares = fmt.Sprintf("%.0f", eventData["shares"])
+
+		inserts, updates, err := t.positionTransformer.ProcessPositionTransformation(positionTransformer.ProcessPosition{
+			ReceiverAddress: receiverAddress,
+			SenderAddress:   senderAddress,
+			ContractAddress: event.ContractAddress,
+			AmountShares:    amountShares,
+			BlockNumber:     uint64(event.BlockNumber),
+		}, true)
+		if err != nil {
+			return nil, nil, err
+		}
+		t.logger.Printf("inserts: %v", inserts)
+		t.logger.Printf("updates: %v", updates)
+
+		return inserts, updates, nil
+	}
+
+	return nil, nil, nil
 }
