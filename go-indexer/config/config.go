@@ -33,8 +33,9 @@ type ContractConfig struct {
 }
 
 type DatabaseConfig struct {
-	SupabaseURL string
-	SupabaseKey string
+	SupabaseURL              string
+	SupabaseKey              string
+	PostgresConnectionString string
 }
 
 func (c *Config) loadEnvFile(env string) error {
@@ -91,6 +92,7 @@ func Load(c *Config) (*Config, error) {
 	config.Database.SupabaseURL = os.Getenv("INDEXER_SUPABASE_URL")
 	config.Database.SupabaseKey = os.Getenv("INDEXER_SUPABASE_ADMIN_KEY")
 	config.Ethereum.WebsocketURL = os.Getenv("INDEXER_ETH_RPC_WS_URL")
+	config.Database.PostgresConnectionString = os.Getenv("INDEXER_POSTGRES_CONNECTION_STRING")
 
 	return &config, nil
 }

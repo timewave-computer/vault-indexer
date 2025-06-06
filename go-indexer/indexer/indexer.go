@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"math/big"
@@ -22,11 +23,12 @@ import (
 
 // Indexer handles blockchain event indexing and position tracking
 type Indexer struct {
-	config *config.Config
-	client *ethclient.Client
-	db     *supa.Client
-	ctx    context.Context
-	cancel context.CancelFunc
+	config         *config.Config
+	ethClient      *ethclient.Client
+	supabaseClient *supa.Client
+	ctx            context.Context
+	cancel         context.CancelFunc
+	postgresClient *sql.DB
 	// positionChan      chan PositionEvent
 	// withdrawChan      chan WithdrawRequestEvent
 	// positionProcessor *PositionProcessor
@@ -40,37 +42,41 @@ type Indexer struct {
 func New(cfg *config.Config) (*Indexer, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	client, err := ethclient.Dial(cfg.Ethereum.WebsocketURL)
+	ethClient, err := ethclient.Dial(cfg.Ethereum.WebsocketURL)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
 
 	// Connect to Supabase
-	db, err := supa.NewClient(cfg.Database.SupabaseURL, cfg.Database.SupabaseKey, &supa.ClientOptions{})
+	supabaseClient, err := supa.NewClient(cfg.Database.SupabaseURL, cfg.Database.SupabaseKey, &supa.ClientOptions{})
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to connect to Supabase: %w", err)
 	}
 
 	// Create processors
-	eventProcessor := NewEventProcessor(db, client)
-	// positionChan := make(chan PositionEvent, 1000)        // Buffer size of 1000 events
-	// withdrawChan := make(chan WithdrawRequestEvent, 1000) // Buffer size of 1000 events
-	// positionProcessor := NewPositionProcessor(db)
-	// withdrawProcessor := NewWithdrawProcessor(db)
-	transformer := NewTransformer(db)
+	eventProcessor := NewEventProcessor(supabaseClient, ethClient)
+
+	postgresClient, err := sql.Open("postgres", cfg.Database.PostgresConnectionString)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to connect to Postgres: %w", err)
+	}
+
+	transformer, err := NewTransformer(supabaseClient, postgresClient)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to create transformer: %w", err)
+	}
 
 	return &Indexer{
-		config: cfg,
-		client: client,
-		db:     db,
-		ctx:    ctx,
-		cancel: cancel,
-		// positionChan:      positionChan,
-		// withdrawChan:      withdrawChan,
-		// positionProcessor: positionProcessor,
-		// withdrawProcessor: withdrawProcessor,
+		config:         cfg,
+		postgresClient: postgresClient,
+		ethClient:      ethClient,
+		supabaseClient: supabaseClient,
+		ctx:            ctx,
+		cancel:         cancel,
 		eventProcessor: eventProcessor,
 		transformer:    transformer,
 		logger:         logger.NewLogger("Indexer"),
@@ -81,7 +87,7 @@ func (i *Indexer) Start() error {
 	i.logger.Println("Starting indexer...")
 
 	// Perform health check by getting current block height
-	blockNumber, err := i.client.BlockNumber(i.ctx)
+	blockNumber, err := i.ethClient.BlockNumber(i.ctx)
 	if err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}
@@ -131,7 +137,7 @@ func (i *Indexer) loadHistoricalEvents(contract config.ContractConfig) error {
 	contractAddress := common.HexToAddress(contract.Address)
 
 	// Get current block number
-	currentBlock, err := i.client.BlockNumber(i.ctx)
+	currentBlock, err := i.ethClient.BlockNumber(i.ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get current block: %w", err)
 	}
@@ -159,7 +165,7 @@ func (i *Indexer) loadHistoricalEvents(contract config.ContractConfig) error {
 			Topics:    [][]common.Hash{{event.ID}},
 		}
 
-		logs, err := i.client.FilterLogs(i.ctx, query)
+		logs, err := i.ethClient.FilterLogs(i.ctx, query)
 		if err != nil {
 			return fmt.Errorf("failed to get logs: %w", err)
 		}
@@ -201,7 +207,7 @@ func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error 
 		}
 
 		logs := make(chan types.Log)
-		sub, err := i.client.SubscribeFilterLogs(i.ctx, query, logs)
+		sub, err := i.ethClient.SubscribeFilterLogs(i.ctx, query, logs)
 		if err != nil {
 			return fmt.Errorf("failed to subscribe to logs: %w", err)
 		}
@@ -234,20 +240,14 @@ func (i *Indexer) Stop() error {
 	// signal writers to stop
 	i.cancel()
 
-	// close channels so the reader goroutines can exit gracefully
-	// close(i.positionChan)
-	// close(i.withdrawChan)
-
 	// wait until all goroutines finish
 	i.wg.Wait()
 
-	// stop processors
-	// i.positionProcessor.Stop()
-	// i.withdrawProcessor.Stop()
 	i.eventProcessor.Stop()
 	i.transformer.Stop()
 
 	// finally release external resources
-	i.client.Close()
+	i.ethClient.Close()
+	i.postgresClient.Close()
 	return nil
 }

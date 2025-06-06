@@ -82,7 +82,7 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 				if senderAddress != "" && senderAddress != ZERO_ADDRESS.Hex() {
 					data, _, err := p.db.From("positions").
 						Select("*", "", false).
-						Eq("ethereum_address", senderAddress).
+						Eq("owner_address", senderAddress).
 						Eq("contract_address", contractAddress).
 						Order("id", &postgrest.OrderOpts{Ascending: false}).
 						Limit(1, "").
@@ -102,7 +102,7 @@ func (p *PositionProcessor) Start(eventChan <-chan PositionEvent) error {
 				if receiverAddress != "" && receiverAddress != ZERO_ADDRESS.Hex() {
 					data, _, err := p.db.From("positions").
 						Select("*", "", false).
-						Eq("ethereum_address", receiverAddress).
+						Eq("owner_address", receiverAddress).
 						Eq("contract_address", contractAddress).
 						Order("position_index_id", &postgrest.OrderOpts{Ascending: false}).
 						Limit(1, "").
