@@ -69,14 +69,10 @@ export async function GET(
     const { from, limit, order } = querySchema.parse(Object.fromEntries(searchParams.entries()))
 
     const response = await sql`
-      WITH distinct_owners AS (
-        SELECT DISTINCT ON (owner_address) owner_address, id
-        FROM positions
-        WHERE contract_address = ${vaultAddress}
-      )
-      SELECT owner_address
-      FROM distinct_owners
-      ORDER BY id ${order === 'asc' ? sql`ASC` : sql`DESC`}
+      SELECT DISTINCT owner_address
+      FROM positions
+      WHERE contract_address = ${vaultAddress}
+      ORDER BY owner_address ${order === 'asc' ? sql`ASC` : sql`DESC`}
       LIMIT ${limit}
       OFFSET ${from}
     `

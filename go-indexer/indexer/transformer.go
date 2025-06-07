@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"sync"
 	"time"
 
@@ -67,9 +68,9 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB) (*Transformer, error) {
 		ctx:                 ctx,
 		cancel:              cancel,
 		logger:              logger.NewLogger("Transformer"),
-		maxRetries:          0,
+		maxRetries:          1,
 		lastError:           nil,
-		retryCount:          0,
+		retryCount:          1,
 		positionTransformer: positionTransformer.NewPositionTransformer(supa),
 	}, nil
 }
@@ -200,13 +201,16 @@ func (t *Transformer) Start() error {
 					}
 					t.logger.Printf("Successfully committed transaction for event: %v", event.Id)
 
+					t.logger.Printf("resetting retry count")
+					// Reset retry count on successful operation
+					t.retryCount = 0
+					t.lastError = nil
 				}
 
-				// Reset retry count on successful operation
-				t.retryCount = 0
-				t.lastError = nil
 			}
+
 		}
+
 	}()
 	return nil
 }
@@ -226,7 +230,7 @@ func (t *Transformer) handleError(err error) {
 		}
 	} else {
 		t.lastError = err
-		t.retryCount = 1
+		t.retryCount = 0
 	}
 
 	// Calculate backoff duration (exponential backoff with jitter)
@@ -356,8 +360,13 @@ func (t *Transformer) computeTransformation(event database.PublicEventsSelect) (
 			receiverAddress = to
 		}
 
-		// Handle value that could be either string or numeric
+		var withdrawId = fmt.Sprintf("%.0f", eventData["id"])
 		var amountShares = fmt.Sprintf("%.0f", eventData["shares"])
+
+		withdrawIdNum, err := strconv.ParseInt(withdrawId, 10, 64)
+		if err != nil {
+			return operations, fmt.Errorf("failed to parse withdraw id: %v", err)
+		}
 
 		inserts, updates, err := t.positionTransformer.ProcessPositionTransformation(positionTransformer.ProcessPosition{
 			ReceiverAddress: receiverAddress,
@@ -392,7 +401,7 @@ func (t *Transformer) computeTransformation(event database.PublicEventsSelect) (
 			ContractAddress: event.ContractAddress,
 			OwnerAddress:    senderAddress,
 			ReceiverAddress: receiverAddress,
-			WithdrawId:      int64(event.BlockNumber),
+			WithdrawId:      withdrawIdNum,
 		}
 		operations.inserts = append(operations.inserts, DBOperation{
 			table: "withdraw_requests",
