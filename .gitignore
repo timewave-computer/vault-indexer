@@ -44,7 +44,7 @@ yarn-error.log*
 next-env.d.ts
 
 # nix/environment
-direnv/
+.direnv
 result
 
 # MISC
