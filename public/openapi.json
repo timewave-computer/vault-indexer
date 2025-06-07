@@ -21,6 +21,78 @@
         }
     ],
     "paths": {
+        "/v1/vault/{vaultAddress}/accounts": {
+            "get": {
+                "summary": "Get accounts for a specific vault",
+                "description": "Retrieves accounts for a given vault address with pagination",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "vaultAddress",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Ethereum address of the vault"
+                    },
+                    {
+                        "in": "query",
+                        "name": "from",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Starting account index for pagination"
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Number of records to return"
+                    },
+                    {
+                        "in": "query",
+                        "name": "order",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "asc",
+                                "desc"
+                            ]
+                        },
+                        "description": "Sort order"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of account addresses",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "owner_address": {
+                                                "type": "string",
+                                                "description": "Ethereum address of the account owner"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters"
+                    },
+                    "500": {
+                        "description": "Not implemented"
+                    }
+                }
+            }
+        },
         "/v1/vault/{vaultAddress}/positions": {
             "get": {
                 "summary": "Get vault positions",

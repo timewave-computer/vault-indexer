@@ -3,12 +3,9 @@ package indexer
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand"
-	"strconv"
 	"sync"
 	"time"
 
@@ -157,28 +154,28 @@ func (t *Transformer) Start() error {
 						IsProcessed: ptr(true),
 					}
 
-					inserts, updates, err := t.computeTransformation(event)
+					dbOperations, err := t.computeTransformation(event)
 					if err != nil {
 						t.logger.Printf("Error computing transformation: %v", err)
 						tx.Rollback()
 						t.handleError(err)
 					}
 
-					for _, insert := range inserts {
-						t.logger.Printf("Inserting position: %v", insert)
-						err = t.insertTable(tx, "positions", insert)
+					for _, insertOperation := range dbOperations.inserts {
+						t.logger.Printf("Inserting: %v", insertOperation)
+						err = t.insertTable(tx, insertOperation.table, insertOperation.data)
 						if err != nil {
 							t.logger.Printf("Error inserting position: %v", err)
 							tx.Rollback()
 							t.handleError(err)
 							break
 						}
-
 					}
 
-					for _, update := range updates {
-						t.logger.Printf("Updating position: %v", update)
-						err = t.updateTable(tx, "positions", update)
+					for _, updateOperation := range dbOperations.updates {
+						t.logger.Printf("Updating : %v", updateOperation)
+
+						err = t.updateTable(tx, updateOperation.table, updateOperation.data)
 						if err != nil {
 							t.logger.Printf("Error updating position: %v", err)
 							tx.Rollback()
@@ -258,7 +255,7 @@ func (t *Transformer) Stop() {
 }
 
 func (t *Transformer) insertTable(tx *sql.Tx, table string, data any) error {
-	t.logger.Printf("building insert")
+	t.logger.Printf("building insert for table: %v, data: %v", table, data)
 	query, args, err := dbutil.BuildInsert(table, data)
 	if err != nil {
 		return err
@@ -289,39 +286,12 @@ func (t *Transformer) updateTable(tx *sql.Tx, table string, data any) error {
 	return nil
 }
 
-func ptr[T any](v T) *T {
-	return &v
-}
+func (t *Transformer) computeTransformation(event database.PublicEventsSelect) (DatabaseOperations, error) {
 
-func parseQuotedBased64Json(event database.PublicEventsSelect) (map[string]interface{}, error) {
-
-	rawBytes, ok := event.RawData.([]uint8)
-	if !ok {
-		return nil, fmt.Errorf("raw data is not of type []uint8")
-	}
-	base64string := string(rawBytes)
-	unquoted, err := strconv.Unquote(base64string)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unquote raw data: %w", err)
-	}
-
-	decodedBytes, err := base64.StdEncoding.DecodeString(unquoted)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode base64: %w", err)
-	}
-	var data map[string]interface{}
-	if err := json.Unmarshal(decodedBytes, &data); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal raw data: %w", err)
-	}
-	return data, nil
-
-}
-
-func (t *Transformer) computeTransformation(event database.PublicEventsSelect) ([]database.PositionInsert, []database.PositionUpdate, error) {
-
+	var operations DatabaseOperations
 	var eventData, err = parseQuotedBased64Json(event)
 	if err != nil {
-		return nil, nil, err
+		return operations, err
 	}
 	t.logger.Printf("NEW: %v %v eventData: %v", event.ContractAddress, event.EventName, eventData)
 
@@ -333,12 +303,12 @@ func (t *Transformer) computeTransformation(event database.PublicEventsSelect) (
 		if to, ok := eventData["to"].(string); ok {
 			receiverAddress = to
 		} else {
-			return nil, nil, errors.New("to not found")
+			return operations, errors.New("to not found")
 		}
 		if from, ok := eventData["from"].(string); ok {
 			senderAddress = from
 		} else {
-			return nil, nil, errors.New("from not found")
+			return operations, errors.New("from not found")
 		}
 
 		var amountShares = fmt.Sprintf("%.0f", eventData["value"])
@@ -354,10 +324,25 @@ func (t *Transformer) computeTransformation(event database.PublicEventsSelect) (
 		t.logger.Printf("updates: %v", updates)
 
 		if err != nil {
-			return nil, nil, err
+			return operations, err
 		}
 
-		return inserts, updates, nil
+		if len(inserts) > 0 {
+
+			operations.inserts = append(operations.inserts, DBOperation{
+				table: "positions",
+				data:  inserts,
+			})
+		}
+		if len(updates) > 0 {
+
+			operations.updates = append(operations.updates, DBOperation{
+				table: "positions",
+				data:  updates,
+			})
+		}
+
+		return operations, nil
 
 	} else if event.EventName == "WithdrawRequested" {
 
@@ -382,13 +367,50 @@ func (t *Transformer) computeTransformation(event database.PublicEventsSelect) (
 			BlockNumber:     uint64(event.BlockNumber),
 		}, true)
 		if err != nil {
-			return nil, nil, err
+			return operations, err
 		}
 		t.logger.Printf("inserts: %v", inserts)
 		t.logger.Printf("updates: %v", updates)
 
-		return inserts, updates, nil
+		if len(inserts) > 0 {
+			operations.inserts = append(operations.inserts, DBOperation{
+				table: "positions",
+				data:  inserts,
+			})
+		}
+
+		if len(updates) > 0 {
+			operations.updates = append(operations.updates, DBOperation{
+				table: "positions",
+				data:  updates,
+			})
+		}
+
+		withdrawRequest := database.PublicWithdrawRequestsInsert{
+			Amount:          amountShares,
+			BlockNumber:     int64(event.BlockNumber),
+			ContractAddress: event.ContractAddress,
+			OwnerAddress:    senderAddress,
+			ReceiverAddress: receiverAddress,
+			WithdrawId:      int64(event.BlockNumber),
+		}
+		operations.inserts = append(operations.inserts, DBOperation{
+			table: "withdraw_requests",
+			data:  withdrawRequest,
+		})
+
+		return operations, nil
 	}
 
-	return nil, nil, nil
+	return operations, nil
+}
+
+type DBOperation struct {
+	table string
+	data  any
+}
+
+type DatabaseOperations struct {
+	inserts []DBOperation
+	updates []DBOperation
 }

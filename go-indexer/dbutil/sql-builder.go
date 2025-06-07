@@ -32,6 +32,23 @@ func BuildInsert(table string, s any) (string, []interface{}, error) {
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
 	}
+
+	// Handle slice of structs
+	if v.Kind() == reflect.Slice {
+		if v.Len() == 0 {
+			return "", nil, fmt.Errorf("empty slice provided")
+		}
+		// Use the first element of the slice
+		v = v.Index(0)
+		if v.Kind() == reflect.Ptr {
+			v = v.Elem()
+		}
+	}
+
+	if v.Kind() != reflect.Struct {
+		return "", nil, fmt.Errorf("expected struct or slice of structs, got %v", v.Kind())
+	}
+
 	t := v.Type()
 
 	var columns []string
@@ -79,6 +96,23 @@ func BuildUpdate(table string, s any, whereKeys []string) (string, []interface{}
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
 	}
+
+	// Handle slice of structs
+	if v.Kind() == reflect.Slice {
+		if v.Len() == 0 {
+			return "", nil, fmt.Errorf("empty slice provided")
+		}
+		// Use the first element of the slice
+		v = v.Index(0)
+		if v.Kind() == reflect.Ptr {
+			v = v.Elem()
+		}
+	}
+
+	if v.Kind() != reflect.Struct {
+		return "", nil, fmt.Errorf("expected struct or slice of structs, got %v", v.Kind())
+	}
+
 	t := v.Type()
 
 	setClauses := []string{}
