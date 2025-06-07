@@ -58,6 +58,9 @@ schema = 3
   [mod."github.com/joho/godotenv"]
     version = "v1.5.1"
     hash = "sha256-kA0osKfsc6Kp+nuGTRJyXZZlJt1D/kuEazKMWYCWcQ8="
+  [mod."github.com/lib/pq"]
+    version = "v1.10.9"
+    hash = "sha256-Gl6dLtL+yk6UrTTWfas43aM4lP/pNa2l7+ITXnjQyKs="
   [mod."github.com/magiconair/properties"]
     version = "v1.8.7"
     hash = "sha256-XQ2bnc2s7/IH3WxEO4GishZurMyKwEclZy1DXg+2xXc="
