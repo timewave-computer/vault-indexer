@@ -1,12 +1,13 @@
 import { type NextRequest } from 'next/server'
 import { isAddress } from 'ethers'
 import { paginationSchema } from "@/app/types"
+import { sql } from '@/app/postgres'
 
 /**
  * @swagger
  * /v1/vault/{vaultAddress}/accounts:
  *   get:
-*     summary: Get accounts for a specific vault
+ *     summary: Get accounts for a specific vault
  *     description: Retrieves accounts for a given vault address with pagination
  *     parameters:
  *       - in: path
@@ -33,23 +34,17 @@ import { paginationSchema } from "@/app/types"
  *         description: Sort order
  *     responses:
  *       200:
- *         description: List of accounts
+ *         description: List of account addresses
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 data:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: integer
- *                       address:
- *                         type: string
- *                       created_at:
- *                         type: string
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   owner_address:
+ *                     type: string
+ *                     description: Ethereum address of the account owner
  *       400:
  *         description: Invalid request parameters
  *       500:
@@ -73,8 +68,15 @@ export async function GET(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { from, limit, order } = querySchema.parse(Object.fromEntries(searchParams.entries()))
 
-    return Response.json({ error: "API still in development" }, { status: 500 })
-
+    const response = await sql`
+      SELECT DISTINCT owner_address
+      FROM positions
+      WHERE contract_address = ${vaultAddress}
+      ORDER BY owner_address ${order === 'asc' ? sql`ASC` : sql`DESC`}
+      LIMIT ${limit}
+      OFFSET ${from}
+    `
+    return Response.json( response.map(r => r.owner_address), { status: 200 })
 
   } catch (e) {
     const error = e as Error
