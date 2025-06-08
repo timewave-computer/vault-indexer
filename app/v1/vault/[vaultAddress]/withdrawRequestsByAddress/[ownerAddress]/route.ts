@@ -5,7 +5,7 @@ import { paginationSchema } from "@/app/types"
 
 /**
  * @swagger
- * /v1/vault/{vaultAddress}/withdrawRequestByAddress/{ownerAddress}:
+ * /v1/vault/{vaultAddress}/withdrawRequestsByAddress/{ownerAddress}:
  *   get:
  *     summary: Get vault withdraw request by ethereum address
  *     description: Retrieves withdraw requests for a given ethereum address in a specific vault
