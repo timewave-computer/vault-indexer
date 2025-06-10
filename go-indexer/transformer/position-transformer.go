@@ -45,14 +45,41 @@ type ProcessPosition struct {
 	BlockNumber     uint64
 }
 
-func (p *PositionTransformer) getMostRecentPosition(address string, contractAddress string) (*database.PublicPositionsSelect, error) {
+func (p *PositionTransformer) Transform(args ProcessPosition, isWithdraw bool) ([]database.PositionInsert, []database.PositionUpdate, error) {
+	var receiverPosition *database.PublicPositionsSelect
+	var senderPosition *database.PublicPositionsSelect
+	var maxPositionIndexId int64
+
+	senderPosition, err := p.GetMostRecentPosition(args.SenderAddress, args.ContractAddress)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	receiverPosition, err = p.GetMostRecentPosition(args.ReceiverAddress, args.ContractAddress)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	maxPositionIndexId, err = p.getMaxPositionIndexId(args.ContractAddress)
+	if err != nil {
+		p.logger.Printf("Error getting max position index id: %v", err)
+		return nil, nil, err
+	}
+
+	if isWithdraw {
+		return p.ComputeWithdraw(args, senderPosition, receiverPosition, maxPositionIndexId)
+	} else {
+		return p.ComputeTransfer(args, senderPosition, receiverPosition, maxPositionIndexId)
+	}
+}
+
+func (p *PositionTransformer) GetMostRecentPosition(address string, contractAddress string) (*database.PublicPositionsSelect, error) {
 	if address == "" || address == ZERO_ADDRESS.Hex() || !common.IsHexAddress(address) {
 		return nil, nil
 	}
 
 	data, _, err := p.db.From("positions").
 		Select("*", "", false).
-		Neq("is_terminated", "false").
 		Eq("owner_address", address).
 		Eq("contract_address", contractAddress).
 		Order("position_index_id", &postgrest.OrderOpts{Ascending: false}).
@@ -69,35 +96,12 @@ func (p *PositionTransformer) getMostRecentPosition(address string, contractAddr
 		p.logger.Printf("Error unmarshaling position: %v", err)
 		return nil, err
 	}
+
+	if pos.IsTerminated != nil && *pos.IsTerminated {
+		return nil, nil
+	}
+
 	return &pos, nil
-}
-
-func (p *PositionTransformer) Transform(args ProcessPosition, isWithdraw bool) ([]database.PositionInsert, []database.PositionUpdate, error) {
-	var receiverPosition *database.PublicPositionsSelect
-	var senderPosition *database.PublicPositionsSelect
-	var maxPositionIndexId int64
-
-	senderPosition, err := p.getMostRecentPosition(args.SenderAddress, args.ContractAddress)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	receiverPosition, err = p.getMostRecentPosition(args.ReceiverAddress, args.ContractAddress)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	maxPositionIndexId, err = p.getMaxPositionIndexId(args.ContractAddress)
-	if err != nil {
-		p.logger.Printf("Error getting max position index id: %v", err)
-		return nil, nil, err
-	}
-
-	if isWithdraw {
-		return p.ComputeWithdraw(args, senderPosition, receiverPosition, maxPositionIndexId)
-	} else {
-		return p.ComputeTransfer(args, senderPosition, receiverPosition, maxPositionIndexId)
-	}
 }
 
 func (p *PositionTransformer) ComputeTransfer(args ProcessPosition, senderPosition *database.PublicPositionsSelect, receiverPosition *database.PublicPositionsSelect, maxPositionIndexId int64) ([]database.PositionInsert, []database.PositionUpdate, error) {
