@@ -12,6 +12,7 @@ import (
 	"github.com/supabase-community/postgrest-go"
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/database"
+	"github.com/timewave/vault-indexer/go-indexer/logger"
 )
 
 var (
@@ -24,6 +25,7 @@ type PositionTransformer struct {
 	db     *supa.Client
 	ctx    context.Context
 	cancel context.CancelFunc
+	logger *logger.Logger
 }
 
 func NewPositionTransformer(db *supa.Client) *PositionTransformer {
@@ -32,6 +34,7 @@ func NewPositionTransformer(db *supa.Client) *PositionTransformer {
 		db:     db,
 		ctx:    ctx,
 		cancel: cancel,
+		logger: logger.NewLogger("Transformer:Position"),
 	}
 }
 
@@ -53,7 +56,7 @@ func (p *PositionTransformer) Transform(args ProcessPosition, isWithdraw bool) (
 			Select("*", "", false).
 			Eq("owner_address", args.SenderAddress).
 			Eq("contract_address", args.ContractAddress).
-			Order("id", &postgrest.OrderOpts{Ascending: false}).
+			Order("position_index_id", &postgrest.OrderOpts{Ascending: false}).
 			Limit(1, "").
 			Single().
 			Execute()
@@ -81,7 +84,7 @@ func (p *PositionTransformer) Transform(args ProcessPosition, isWithdraw bool) (
 		if err == nil {
 			var pos database.PublicPositionsSelect
 			if err := json.Unmarshal(data, &pos); err != nil {
-				log.Printf("Error unmarshaling current position: %v", err)
+				p.logger.Printf("Error unmarshaling current position: %v", err)
 				return nil, nil, err
 			}
 			receiverPosition = &pos
@@ -90,22 +93,22 @@ func (p *PositionTransformer) Transform(args ProcessPosition, isWithdraw bool) (
 
 	maxPositionIndexId, err := p.getMaxPositionIndexId(args.ContractAddress)
 	if err != nil {
-		log.Printf("Error getting max position index id: %v", err)
+		p.logger.Printf("Error getting max position index id: %v", err)
 		return nil, nil, err
 	}
 
 	if isWithdraw {
-		return p.computeWithdraw(args, senderPosition, receiverPosition, maxPositionIndexId)
+		return p.ComputeWithdraw(args, senderPosition, receiverPosition, maxPositionIndexId)
 	} else {
-		return p.computeTransfer(args, senderPosition, receiverPosition, maxPositionIndexId)
+		return p.ComputeTransfer(args, senderPosition, receiverPosition, maxPositionIndexId)
 	}
 }
 
-func (p *PositionTransformer) computeTransfer(args ProcessPosition, senderPosition *database.PublicPositionsSelect, receiverPosition *database.PublicPositionsSelect, maxPositionIndexId int64) ([]database.PositionInsert, []database.PositionUpdate, error) {
+func (p *PositionTransformer) ComputeTransfer(args ProcessPosition, senderPosition *database.PublicPositionsSelect, receiverPosition *database.PublicPositionsSelect, maxPositionIndexId int64) ([]database.PositionInsert, []database.PositionUpdate, error) {
 	var updates []database.PositionUpdate
 	var inserts []database.PositionInsert
 	positionIndexId := maxPositionIndexId
-	log.Printf("maxPositionIndexId: %v", maxPositionIndexId)
+	p.logger.Printf("maxPositionIndexId: %v", maxPositionIndexId)
 
 	var isTransferWithdraw = args.ReceiverAddress == ZERO_ADDRESS.Hex()
 
@@ -127,7 +130,7 @@ func (p *PositionTransformer) computeTransfer(args ProcessPosition, senderPositi
 	} else {
 
 		// update receiver position
-		insert, update, err := updatePosition(UpdatePositionInput{
+		insert, update, err := p.UpdatePosition(UpdatePositionInput{
 			CurrentPosition: receiverPosition,
 			Address:         args.ReceiverAddress,
 			AmountShares:    args.AmountShares,
@@ -135,7 +138,7 @@ func (p *PositionTransformer) computeTransfer(args ProcessPosition, senderPositi
 			IsAddition:      true,
 		}, &positionIndexId)
 		if err != nil {
-			log.Printf("error updating position: %v", err)
+			p.logger.Printf("error updating position: %v", err)
 			return inserts, updates, err
 		}
 		if update != nil {
@@ -154,7 +157,7 @@ func (p *PositionTransformer) computeTransfer(args ProcessPosition, senderPositi
 
 	} else {
 		// update sender position
-		insert, update, err := updatePosition(UpdatePositionInput{
+		insert, update, err := p.UpdatePosition(UpdatePositionInput{
 			CurrentPosition: senderPosition,
 			Address:         args.SenderAddress,
 			AmountShares:    args.AmountShares,
@@ -162,7 +165,7 @@ func (p *PositionTransformer) computeTransfer(args ProcessPosition, senderPositi
 			IsAddition:      false,
 		}, &positionIndexId)
 		if err != nil {
-			log.Printf("error updating position: %v", err)
+			p.logger.Printf("error updating position: %v", err)
 			return inserts, updates, err
 		}
 		if update != nil {
@@ -174,15 +177,15 @@ func (p *PositionTransformer) computeTransfer(args ProcessPosition, senderPositi
 	}
 	return inserts, updates, nil
 }
-func (p *PositionTransformer) computeWithdraw(args ProcessPosition, senderPosition *database.PublicPositionsSelect, receiverPosition *database.PublicPositionsSelect, maxPositionIndexId int64) ([]database.PositionInsert, []database.PositionUpdate, error) {
+func (p *PositionTransformer) ComputeWithdraw(args ProcessPosition, senderPosition *database.PublicPositionsSelect, receiverPosition *database.PublicPositionsSelect, maxPositionIndexId int64) ([]database.PositionInsert, []database.PositionUpdate, error) {
 	var updates []database.PositionUpdate
 	var inserts []database.PositionInsert
 	positionIndexId := maxPositionIndexId
 
-	log.Printf("computing withdraw. args: %v", args)
+	p.logger.Printf("computing withdraw. args: %v", args)
 
 	// update sender position
-	insert, update, err := updatePosition(UpdatePositionInput{
+	insert, update, err := p.UpdatePosition(UpdatePositionInput{
 		CurrentPosition:         senderPosition,
 		Address:                 args.SenderAddress,
 		AmountShares:            args.AmountShares,
@@ -191,16 +194,16 @@ func (p *PositionTransformer) computeWithdraw(args ProcessPosition, senderPositi
 		WithdrawReceiverAddress: &args.ReceiverAddress,
 	}, &positionIndexId)
 	if err != nil {
-		log.Printf("error updating position: %v", err)
+		p.logger.Printf("error updating position: %v", err)
 		return inserts, updates, err
 	}
 
 	if update != nil {
-		log.Printf("got update: %v", *update)
+		p.logger.Printf("got update: %v", *update)
 		updates = append(updates, *update)
 	}
 	if insert != nil {
-		log.Printf("got insert: %v", *insert)
+		p.logger.Printf("got insert: %v", *insert)
 		inserts = append(inserts, *insert)
 	}
 
@@ -217,7 +220,7 @@ type UpdatePositionInput struct {
 	PositionIndexId         int64
 }
 
-func updatePosition(
+func (p *PositionTransformer) UpdatePosition(
 	input UpdatePositionInput,
 	positionIndexId *int64,
 ) (*database.PositionInsert, *database.PositionUpdate, error) {
@@ -226,11 +229,11 @@ func updatePosition(
 		return nil, nil, nil
 	}
 
-	log.Printf("updating position. currentPosition: %v, address: %v, amountShares: %v, blockNumber: %v, isAddition: %v, withdrawReceiverAddress: %v", *input.CurrentPosition, input.Address, input.AmountShares, input.BlockNumber, input.IsAddition, input.WithdrawReceiverAddress)
+	p.logger.Printf("updating position. currentPosition: %v, address: %v, amountShares: %v, blockNumber: %v, isAddition: %v, withdrawReceiverAddress: %v", *input.CurrentPosition, input.Address, input.AmountShares, input.BlockNumber, input.IsAddition, input.WithdrawReceiverAddress)
 
 	newAmountShares, err := computeNewAmountShares(input.CurrentPosition, input.AmountShares, input.IsAddition)
 	if err != nil {
-		log.Printf("error computing new amount shares: %v", err)
+		p.logger.Printf("error computing new amount shares: %v", err)
 		return nil, nil, err
 	}
 
@@ -239,13 +242,13 @@ func updatePosition(
 	// Check if the position should be terminated (either zero balance)
 	var isTerminated = newAmountShares == "0"
 
-	log.Printf("isTerminated: %v, newAmountShares: %v", isTerminated, newAmountShares)
+	p.logger.Printf("isTerminated: %v, newAmountShares: %v", isTerminated, newAmountShares)
 
 	var insert *database.PositionInsert
 	var update database.PositionUpdate
 
 	if !isTerminated {
-		log.Printf("is not terminated. inserting position")
+		p.logger.Printf("is not terminated. inserting position")
 		*positionIndexId++
 
 		newInsert := database.ToPositionInsert(database.PublicPositionsInsert{
@@ -258,7 +261,7 @@ func updatePosition(
 		insert = &newInsert
 	}
 
-	log.Printf("insert value: %v", insert)
+	p.logger.Printf("insert value: %v", insert)
 
 	var receiverAddress string
 	if input.WithdrawReceiverAddress != nil {
@@ -323,14 +326,14 @@ func (p *PositionTransformer) getMaxPositionIndexId(contractAddress string) (int
 		if strings.Contains(errStr, "no rows") || strings.Contains(errStr, "PGRST116") {
 			maxPositionIndexId = 0
 		} else {
-			log.Printf("Error getting max position index id: %v", err)
+			p.logger.Printf("Error getting max position index id: %v", err)
 			return 0, err
 		}
 	} else {
 
 		var posId database.PublicPositionsSelect
 		if err := json.Unmarshal(data, &posId); err != nil {
-			log.Printf("Error unmarshaling max position index id: %v", err)
+			p.logger.Printf("Error unmarshaling max position index id: %v", err)
 			return 0, err
 		}
 		maxPositionIndexId = posId.PositionIndexId

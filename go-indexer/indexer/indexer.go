@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -84,7 +83,7 @@ func New(cfg *config.Config) (*Indexer, error) {
 }
 
 func (i *Indexer) Start() error {
-	i.logger.Println("Starting indexer...")
+	i.logger.Printf("Starting indexer...")
 
 	// Perform health check by getting current block height
 	blockNumber, err := i.ethClient.BlockNumber(i.ctx)
@@ -218,11 +217,11 @@ func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error 
 			for {
 				select {
 				case err := <-sub.Err():
-					log.Printf("Subscription error: %v", err)
+					i.logger.Printf("Subscription error: %v", err)
 					return
 				case vLog := <-logs:
 					if err := i.eventProcessor.processEvent(vLog, event, contract.Name); err != nil {
-						log.Printf("Error processing event: %v", err)
+						i.logger.Printf("Error processing event: %v", err)
 					}
 				case <-i.ctx.Done():
 					return
@@ -235,7 +234,7 @@ func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error 
 }
 
 func (i *Indexer) Stop() error {
-	i.logger.Println("Stopping indexer...")
+	i.logger.Printf("Stopping indexer...")
 
 	// signal writers to stop
 	i.cancel()
