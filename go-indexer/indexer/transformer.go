@@ -65,7 +65,7 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB) (*Transformer, error) {
 		ctx:              ctx,
 		cancel:           cancel,
 		logger:           logger.NewLogger("Transformer"),
-		maxRetries:       0,
+		maxRetries:       5,
 		lastError:        nil,
 		retryCount:       0,
 		transformHandler: transformHandler,
@@ -91,7 +91,7 @@ func (t *Transformer) Start() error {
 					 FROM events 
 					WHERE is_processed IS NULL 
 					ORDER BY block_number ASC, log_index ASC 
-					LIMIT 1
+					LIMIT 100
 				`)
 				if err != nil {
 					t.handleError(err)
@@ -173,7 +173,7 @@ func (t *Transformer) Start() error {
 					}
 
 					for _, updateOperation := range dbOperations.updates {
-						t.logger.Printf("Updating : %v", updateOperation)
+						t.logger.Printf("Updating: %v", updateOperation)
 
 						err = t.updateTable(tx, updateOperation.table, updateOperation.data)
 						if err != nil {
