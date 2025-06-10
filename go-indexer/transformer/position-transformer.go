@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"math/big"
 	"strings"
 
@@ -46,52 +45,49 @@ type ProcessPosition struct {
 	BlockNumber     uint64
 }
 
+func (p *PositionTransformer) getMostRecentPosition(address string, contractAddress string) (*database.PublicPositionsSelect, error) {
+	if address == "" || address == ZERO_ADDRESS.Hex() || !common.IsHexAddress(address) {
+		return nil, nil
+	}
+
+	data, _, err := p.db.From("positions").
+		Select("*", "", false).
+		Neq("is_terminated", "false").
+		Eq("owner_address", address).
+		Eq("contract_address", contractAddress).
+		Order("position_index_id", &postgrest.OrderOpts{Ascending: false}).
+		Limit(1, "").
+		Single().
+		Execute()
+
+	if err != nil {
+		return nil, nil
+	}
+
+	var pos database.PublicPositionsSelect
+	if err := json.Unmarshal(data, &pos); err != nil {
+		p.logger.Printf("Error unmarshaling position: %v", err)
+		return nil, err
+	}
+	return &pos, nil
+}
+
 func (p *PositionTransformer) Transform(args ProcessPosition, isWithdraw bool) ([]database.PositionInsert, []database.PositionUpdate, error) {
 	var receiverPosition *database.PublicPositionsSelect
 	var senderPosition *database.PublicPositionsSelect
 	var maxPositionIndexId int64
 
-	if args.SenderAddress != "" && args.SenderAddress != ZERO_ADDRESS.Hex() && common.IsHexAddress(args.SenderAddress) {
-		data, _, err := p.db.From("positions").
-			Select("*", "", false).
-			Eq("owner_address", args.SenderAddress).
-			Eq("contract_address", args.ContractAddress).
-			Order("position_index_id", &postgrest.OrderOpts{Ascending: false}).
-			Limit(1, "").
-			Single().
-			Execute()
-
-		if err == nil {
-			var pos database.PublicPositionsSelect
-			if err := json.Unmarshal(data, &pos); err != nil {
-				log.Printf("Error unmarshaling sender position: %v", err)
-				return nil, nil, err
-			}
-			senderPosition = &pos
-		}
+	senderPosition, err := p.getMostRecentPosition(args.SenderAddress, args.ContractAddress)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	if args.ReceiverAddress != "" && args.ReceiverAddress != ZERO_ADDRESS.Hex() && common.IsHexAddress(args.ReceiverAddress) {
-		data, _, err := p.db.From("positions").
-			Select("*", "", false).
-			Eq("owner_address", args.ReceiverAddress).
-			Eq("contract_address", args.ContractAddress).
-			Order("position_index_id", &postgrest.OrderOpts{Ascending: false}).
-			Limit(1, "").
-			Single().
-			Execute()
-
-		if err == nil {
-			var pos database.PublicPositionsSelect
-			if err := json.Unmarshal(data, &pos); err != nil {
-				p.logger.Printf("Error unmarshaling current position: %v", err)
-				return nil, nil, err
-			}
-			receiverPosition = &pos
-		}
+	receiverPosition, err = p.getMostRecentPosition(args.ReceiverAddress, args.ContractAddress)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	maxPositionIndexId, err := p.getMaxPositionIndexId(args.ContractAddress)
+	maxPositionIndexId, err = p.getMaxPositionIndexId(args.ContractAddress)
 	if err != nil {
 		p.logger.Printf("Error getting max position index id: %v", err)
 		return nil, nil, err
