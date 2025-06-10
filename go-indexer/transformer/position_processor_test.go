@@ -1,4 +1,4 @@
-package indexer
+package transformer
 
 import (
 	"math/big"

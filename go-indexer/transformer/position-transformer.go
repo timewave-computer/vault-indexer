@@ -43,7 +43,7 @@ type ProcessPosition struct {
 	BlockNumber     uint64
 }
 
-func (p *PositionTransformer) ProcessPositionTransformation(args ProcessPosition, isWithdraw bool) ([]database.PositionInsert, []database.PositionUpdate, error) {
+func (p *PositionTransformer) Transform(args ProcessPosition, isWithdraw bool) ([]database.PositionInsert, []database.PositionUpdate, error) {
 	var receiverPosition *database.PublicPositionsSelect
 	var senderPosition *database.PublicPositionsSelect
 	var maxPositionIndexId int64
