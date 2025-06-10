@@ -15,6 +15,7 @@ type Config struct {
 	Ethereum  EthereumConfig   `mapstructure:"ethereum"`
 	Contracts []ContractConfig `mapstructure:"contracts"`
 	Database  DatabaseConfig   `mapstructure:"database"`
+	LogLevel  string           `mapstructure:"log_level"`
 	logger    *logger.Logger
 }
 
@@ -40,7 +41,7 @@ type DatabaseConfig struct {
 
 func (c *Config) loadEnvFile(env string) error {
 	envFile := fmt.Sprintf(".env.%s", env)
-	c.logger.Printf("Loading env file from %s", envFile)
+	c.logger.Info("Loading env file from %s", envFile)
 	if err := godotenv.Load(envFile); err != nil {
 		return fmt.Errorf("failed to load env file: %w", err)
 	}
@@ -54,12 +55,11 @@ func New(logger *logger.Logger) *Config {
 }
 
 func Load(c *Config) (*Config, error) {
-
 	env := os.Getenv("ENV")
 	if env == "" {
 		env = "dev" // Default to dev environment
 	}
-	c.logger.Printf("Loading config for env: %s", env)
+	c.logger.Info("Loading config for env: %s", env)
 
 	// Load environment variables from .env.{env} file
 	if err := c.loadEnvFile(env); err != nil {
@@ -73,7 +73,7 @@ func Load(c *Config) (*Config, error) {
 	_, currentFile, _, _ := runtime.Caller(0)
 	configDir := filepath.Dir(currentFile)
 
-	c.logger.Printf("Loading indexer config from: %s", configDir)
+	c.logger.Info("Loading indexer config from: %s", configDir)
 
 	// Add the config directory to the path
 	viper.AddConfigPath(configDir)
@@ -81,7 +81,7 @@ func Load(c *Config) (*Config, error) {
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
-	c.logger.Printf("Loaded config file from: %s", viper.ConfigFileUsed())
+	c.logger.Info("Loaded config file from: %s", viper.ConfigFileUsed())
 
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
@@ -93,6 +93,8 @@ func Load(c *Config) (*Config, error) {
 	config.Database.SupabaseKey = os.Getenv("INDEXER_SUPABASE_ADMIN_KEY")
 	config.Ethereum.WebsocketURL = os.Getenv("INDEXER_ETH_RPC_WS_URL")
 	config.Database.PostgresConnectionString = os.Getenv("INDEXER_POSTGRES_CONNECTION_STRING")
+
+	config.LogLevel = os.Getenv("LOG_LEVEL")
 
 	return &config, nil
 }

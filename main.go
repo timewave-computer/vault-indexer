@@ -14,18 +14,22 @@ import (
 func main() {
 	// Load configuration
 	configLoader := config.New(logger.NewLogger("Config"))
+
 	cfg, err := config.Load(configLoader)
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Initialize indexer
+	// Initialize global log level from config
+	logger.InitGlobalLogLevel(cfg.LogLevel)
+
+	// Create indexer
 	idx, err := indexer.New(cfg)
 	if err != nil {
-		log.Fatalf("Failed to initialize indexer: %v", err)
+		log.Fatalf("Failed to create indexer: %v", err)
 	}
 
-	// Start the indexer
+	// Start indexer
 	if err := idx.Start(); err != nil {
 		log.Fatalf("Failed to start indexer: %v", err)
 	}

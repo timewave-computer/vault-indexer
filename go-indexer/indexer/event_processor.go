@@ -68,7 +68,7 @@ func (e *EventProcessor) processEvent(vLog types.Log, event abi.Event, contractN
 
 	if len(response) > 0 {
 		eventId := response[0].Id
-		e.logger.Printf("Updating existing event: %v", eventId)
+		e.logger.Info("Updating existing event: %v", eventId)
 
 		now := "now()"
 		_, _, err = e.db.From("events").Update(ToEventIngestionUpdate(database.PublicEventsUpdate{
