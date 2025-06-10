@@ -14,6 +14,7 @@ import (
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/database"
 	"github.com/timewave/vault-indexer/go-indexer/dbutil"
+	"github.com/timewave/vault-indexer/go-indexer/extractor"
 	"github.com/timewave/vault-indexer/go-indexer/logger"
 	positionTransformer "github.com/timewave/vault-indexer/go-indexer/transformer"
 )
@@ -27,6 +28,7 @@ type Transformer struct {
 	wg                  sync.WaitGroup
 	logger              *logger.Logger
 	positionTransformer *positionTransformer.PositionTransformer
+	eventExtractor      *extractor.EventExtractor
 
 	// Add retry tracking
 	retryCount    int
@@ -72,6 +74,7 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB) (*Transformer, error) {
 		lastError:           nil,
 		retryCount:          1,
 		positionTransformer: positionTransformer.NewPositionTransformer(supa),
+		eventExtractor:      extractor.NewEventExtractor(),
 	}, nil
 }
 
@@ -291,37 +294,25 @@ func (t *Transformer) updateTable(tx *sql.Tx, table string, data any) error {
 }
 
 func (t *Transformer) computeTransformation(event database.PublicEventsSelect) (DatabaseOperations, error) {
-
 	var operations DatabaseOperations
-	var eventData, err = parseQuotedBased64Json(event)
+
+	eventData, err := t.eventExtractor.ParseEventData(event.RawData)
 	if err != nil {
 		return operations, err
 	}
 	t.logger.Printf("NEW: %v %v eventData: %v", event.ContractAddress, event.EventName, eventData)
 
 	if event.EventName == "Transfer" {
-
-		var senderAddress string
-		var receiverAddress string
-
-		if to, ok := eventData["to"].(string); ok {
-			receiverAddress = to
-		} else {
-			return operations, errors.New("to not found")
+		transferData, err := t.eventExtractor.ExtractTransfer(eventData)
+		if err != nil {
+			return operations, err
 		}
-		if from, ok := eventData["from"].(string); ok {
-			senderAddress = from
-		} else {
-			return operations, errors.New("from not found")
-		}
-
-		var amountShares = fmt.Sprintf("%.0f", eventData["value"])
 
 		inserts, updates, err := t.positionTransformer.ProcessPositionTransformation(positionTransformer.ProcessPosition{
-			ReceiverAddress: receiverAddress,
-			SenderAddress:   senderAddress,
+			ReceiverAddress: transferData.To,
+			SenderAddress:   transferData.From,
 			ContractAddress: event.ContractAddress,
-			AmountShares:    amountShares,
+			AmountShares:    transferData.Amount,
 			BlockNumber:     uint64(event.BlockNumber),
 		}, false)
 		t.logger.Printf("inserts: %v", inserts)
@@ -332,14 +323,12 @@ func (t *Transformer) computeTransformation(event database.PublicEventsSelect) (
 		}
 
 		if len(inserts) > 0 {
-
 			operations.inserts = append(operations.inserts, DBOperation{
 				table: "positions",
 				data:  inserts,
 			})
 		}
 		if len(updates) > 0 {
-
 			operations.updates = append(operations.updates, DBOperation{
 				table: "positions",
 				data:  updates,
@@ -349,30 +338,21 @@ func (t *Transformer) computeTransformation(event database.PublicEventsSelect) (
 		return operations, nil
 
 	} else if event.EventName == "WithdrawRequested" {
-
-		var senderAddress string
-		var receiverAddress string
-
-		if from, ok := eventData["owner"].(string); ok {
-			senderAddress = from
-		}
-		if to, ok := eventData["receiver"].(string); ok {
-			receiverAddress = to
+		withdrawData, err := t.eventExtractor.ExtractWithdraw(eventData)
+		if err != nil {
+			return operations, err
 		}
 
-		var withdrawId = fmt.Sprintf("%.0f", eventData["id"])
-		var amountShares = fmt.Sprintf("%.0f", eventData["shares"])
-
-		withdrawIdNum, err := strconv.ParseInt(withdrawId, 10, 64)
+		withdrawIdNum, err := strconv.ParseInt(withdrawData.WithdrawID, 10, 64)
 		if err != nil {
 			return operations, fmt.Errorf("failed to parse withdraw id: %v", err)
 		}
 
 		inserts, updates, err := t.positionTransformer.ProcessPositionTransformation(positionTransformer.ProcessPosition{
-			ReceiverAddress: receiverAddress,
-			SenderAddress:   senderAddress,
+			ReceiverAddress: withdrawData.Receiver,
+			SenderAddress:   withdrawData.Owner,
 			ContractAddress: event.ContractAddress,
-			AmountShares:    amountShares,
+			AmountShares:    withdrawData.Amount,
 			BlockNumber:     uint64(event.BlockNumber),
 		}, true)
 		if err != nil {
@@ -396,11 +376,11 @@ func (t *Transformer) computeTransformation(event database.PublicEventsSelect) (
 		}
 
 		withdrawRequest := database.PublicWithdrawRequestsInsert{
-			Amount:          amountShares,
+			Amount:          withdrawData.Amount,
 			BlockNumber:     int64(event.BlockNumber),
 			ContractAddress: event.ContractAddress,
-			OwnerAddress:    senderAddress,
-			ReceiverAddress: receiverAddress,
+			OwnerAddress:    withdrawData.Owner,
+			ReceiverAddress: withdrawData.Receiver,
 			WithdrawId:      withdrawIdNum,
 		}
 		operations.inserts = append(operations.inserts, DBOperation{
