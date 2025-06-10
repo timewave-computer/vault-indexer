@@ -26,7 +26,7 @@ var (
 		ERROR: "ERROR",
 	}
 
-	globalLogLevel LogLevel
+	globalLogLevel LogLevel = INFO
 	once           sync.Once
 )
 
