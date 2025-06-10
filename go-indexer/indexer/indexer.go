@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -84,16 +83,16 @@ func New(cfg *config.Config) (*Indexer, error) {
 }
 
 func (i *Indexer) Start() error {
-	i.logger.Println("Starting indexer...")
+	i.logger.Info("Starting indexer...")
 
 	// Perform health check by getting current block height
 	blockNumber, err := i.ethClient.BlockNumber(i.ctx)
 	if err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}
-	i.logger.Printf("Health check successful - Current block height: %d", blockNumber)
+	i.logger.Info("Health check successful - Current block height: %d", blockNumber)
 
-	i.logger.Printf("Processing historical events for %d contracts...", len(i.config.Contracts))
+	i.logger.Info("Processing historical events for %d contracts...", len(i.config.Contracts))
 
 	// Process historical events for each contract
 	for _, contract := range i.config.Contracts {
@@ -103,7 +102,7 @@ func (i *Indexer) Start() error {
 		}
 	}
 
-	i.logger.Printf("Listening to event subscriptions for %d contracts...", len(i.config.Contracts))
+	i.logger.Info("Listening to event subscriptions for %d contracts...", len(i.config.Contracts))
 	// set up event subscriptions for all contracts
 	for _, contract := range i.config.Contracts {
 		if err := i.setupEventSubscriptions(contract); err != nil {
@@ -218,11 +217,11 @@ func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error 
 			for {
 				select {
 				case err := <-sub.Err():
-					log.Printf("Subscription error: %v", err)
+					i.logger.Error("Subscription error: %v", err)
 					return
 				case vLog := <-logs:
 					if err := i.eventProcessor.processEvent(vLog, event, contract.Name); err != nil {
-						log.Printf("Error processing event: %v", err)
+						i.logger.Error("Error processing event: %v", err)
 					}
 				case <-i.ctx.Done():
 					return
@@ -235,7 +234,7 @@ func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error 
 }
 
 func (i *Indexer) Stop() error {
-	i.logger.Println("Stopping indexer...")
+	i.logger.Info("Stopping indexer...")
 
 	// signal writers to stop
 	i.cancel()

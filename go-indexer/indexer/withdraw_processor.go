@@ -39,7 +39,7 @@ func NewWithdrawProcessor(db *supa.Client) *WithdrawProcessor {
 }
 
 func (p *WithdrawProcessor) Start(events <-chan WithdrawRequestEvent) error {
-	log.Println("Starting withdraw request processor...")
+	log.Printf("Starting withdraw request processor...")
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()

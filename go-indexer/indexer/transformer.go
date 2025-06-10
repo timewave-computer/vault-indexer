@@ -3,7 +3,6 @@ package indexer
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"math/rand"
 	"sync"
 	"time"
@@ -19,34 +18,19 @@ import (
 
 // Transformer handles processing of raw events into derived data
 type Transformer struct {
-	db                         *supa.Client
-	pgdb                       *sql.DB
-	ctx                        context.Context
-	cancel                     context.CancelFunc
-	wg                         sync.WaitGroup
-	logger                     *logger.Logger
-	positionTransformer        *transformer.PositionTransformer
-	withdrawRequestTransformer *transformer.WithdrawRequestTransformer
-	transformHandler           *transformHandler.TransformHandler
+	db               *supa.Client
+	pgdb             *sql.DB
+	ctx              context.Context
+	cancel           context.CancelFunc
+	wg               sync.WaitGroup
+	logger           *logger.Logger
+	transformHandler *transformHandler.TransformHandler
 
 	// Add retry tracking
 	retryCount    int
 	maxRetries    int
 	lastError     error
 	lastErrorTime *time.Time
-}
-
-type manualError string
-
-func (e manualError) Error() string {
-	return string(e)
-}
-
-func (e manualError) Is(target error) bool {
-	if t, ok := target.(manualError); ok {
-		return e == t
-	}
-	return false
 }
 
 // NewTransformer creates a new transformer instance
@@ -63,29 +47,33 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB) (*Transformer, error) {
 		return nil, err
 	}
 
+	// initialize transformers
 	positionTransformer := transformer.NewPositionTransformer(supa)
 	withdrawRequestTransformer := transformer.NewWithdrawRequestTransformer(supa)
+
+	// initialize event transformer handlers
 	transferHandler := transformHandler.NewTransferHandler(positionTransformer)
 	withdrawHandler := transformHandler.NewWithdrawHandler(positionTransformer, withdrawRequestTransformer)
+
+	// initialize transform handler
 	transformHandler := transformHandler.NewHandler(transferHandler, withdrawHandler)
 
 	return &Transformer{
-		db:                  supa,
-		pgdb:                pgdb,
-		ctx:                 ctx,
-		cancel:              cancel,
-		logger:              logger.NewLogger("Transformer"),
-		maxRetries:          1,
-		lastError:           nil,
-		retryCount:          1,
-		positionTransformer: positionTransformer,
-		transformHandler:    transformHandler,
+		db:               supa,
+		pgdb:             pgdb,
+		ctx:              ctx,
+		cancel:           cancel,
+		logger:           logger.NewLogger("Transformer"),
+		maxRetries:       5,
+		lastError:        nil,
+		retryCount:       0,
+		transformHandler: transformHandler,
 	}, nil
 }
 
 // Start begins the transformation process
 func (t *Transformer) Start() error {
-	t.logger.Println("Starting transformer...")
+	t.logger.Info("Starting transformer...")
 	t.wg.Add(1)
 	go func() {
 		defer t.wg.Done()
@@ -102,7 +90,7 @@ func (t *Transformer) Start() error {
 					 FROM events 
 					WHERE is_processed IS NULL 
 					ORDER BY block_number ASC, log_index ASC 
-					LIMIT 1
+					LIMIT 100
 				`)
 				if err != nil {
 					t.handleError(err)
@@ -133,7 +121,7 @@ func (t *Transformer) Start() error {
 				rows.Close()
 
 				if len(events) == 0 {
-					t.logger.Printf("No events found, waiting 15 seconds")
+					t.logger.Info("No events found, waiting 15 seconds")
 					select {
 					case <-time.After(15 * time.Second):
 					case <-t.ctx.Done():
@@ -142,18 +130,18 @@ func (t *Transformer) Start() error {
 					continue
 				}
 
-				t.logger.Printf("Received %d events, processing...", len(events))
+				t.logger.Info("Received %d events, processing...", len(events))
 
 				// Process each event in its own transaction
 				for _, event := range events {
 
 					// Start a new transaction for each event
-					t.logger.Printf("Starting transaction for event: %v", event.Id)
+					t.logger.Debug("Starting DB transaction for %v, id: %v", event.EventName, event.Id)
 					tx, err := t.pgdb.BeginTx(t.ctx, &sql.TxOptions{
 						Isolation: sql.LevelReadCommitted,
 					})
 					if err != nil {
-						t.logger.Printf("Error starting transaction: %v", err)
+						t.logger.Error("Error starting transaction: %v", err)
 						t.handleError(err)
 						continue
 					}
@@ -164,17 +152,19 @@ func (t *Transformer) Start() error {
 					}
 
 					dbOperations, err := t.transform(event)
+					t.logger.Debug("dbOperations: %v", dbOperations)
+
 					if err != nil {
-						t.logger.Printf("Error computing transformation: %v", err)
+						t.logger.Error("Error computing transformation: %v", err)
 						tx.Rollback()
 						t.handleError(err)
 					}
 
 					for _, insertOperation := range dbOperations.inserts {
-						t.logger.Printf("Inserting: %v", insertOperation)
+						t.logger.Debug("Inserting: %v", insertOperation)
 						err = t.insertTable(tx, insertOperation.table, insertOperation.data)
 						if err != nil {
-							t.logger.Printf("Error inserting position: %v", err)
+							t.logger.Error("Error inserting position: %v", err)
 							tx.Rollback()
 							t.handleError(err)
 							break
@@ -182,11 +172,11 @@ func (t *Transformer) Start() error {
 					}
 
 					for _, updateOperation := range dbOperations.updates {
-						t.logger.Printf("Updating : %v", updateOperation)
+						t.logger.Debug("Updating: %v", updateOperation)
 
 						err = t.updateTable(tx, updateOperation.table, updateOperation.data)
 						if err != nil {
-							t.logger.Printf("Error updating position: %v", err)
+							t.logger.Error("Error updating position: %v", err)
 							tx.Rollback()
 							t.handleError(err)
 							break
@@ -195,21 +185,21 @@ func (t *Transformer) Start() error {
 
 					err = t.updateTable(tx, "events", eventUpdate)
 					if err != nil {
-						t.logger.Printf("Error updating event: %v", err)
+						t.logger.Error("Error updating event: %v", err)
 						tx.Rollback()
 						t.handleError(err)
-						continue
+						break
 					}
 
-					t.logger.Printf("Committing transaction for event: %v", event.Id)
+					t.logger.Debug("Committing transaction for event: %v", event.Id)
 					if err := tx.Commit(); err != nil {
-						t.logger.Printf("Error committing transaction: %v", err)
+						t.logger.Error("Error committing transaction: %v", err)
 						t.handleError(err)
-						continue
+						break
 					}
-					t.logger.Printf("Successfully committed transaction for event: %v", event.Id)
+					t.logger.Info("Successfully committed transformation for event: %v", event.Id)
 
-					t.logger.Printf("resetting retry count")
+					t.logger.Debug("Resetting retry count")
 					// Reset retry count on successful operation
 					t.retryCount = 0
 					t.lastError = nil
@@ -250,13 +240,14 @@ func (t *Transformer) transform(event database.PublicEventsSelect) (DatabaseOper
 // handleError manages retry logic and backoff
 func (t *Transformer) handleError(err error) {
 	now := time.Now()
-	t.logger.Printf("Error occurred: err %v lastError %v", err, t.lastError)
+	t.logger.Debug("Error occurred: err %v lastError %v, retryCount: %v", err, t.lastError, t.retryCount)
 
 	// If this is the same error as before
-	if t.lastError != nil && errors.Is(err, t.lastError) {
+	if t.lastError != nil {
 		t.retryCount++
+		t.logger.Debug("Incrementing retry count: %v", t.retryCount)
 		if t.retryCount >= t.maxRetries {
-			t.logger.Printf("FAILURE: Max retries (%d) reached for error: %v. Stopping transformer.", t.maxRetries, err)
+			t.logger.Error("FAILURE: Max retries (%d) reached for error: %v. Stopping transformer.", t.maxRetries, err)
 			t.cancel()
 			return
 		}
@@ -270,7 +261,7 @@ func (t *Transformer) handleError(err error) {
 	jitter := time.Duration(rand.Int63n(int64(time.Second)))
 	backoff += jitter
 
-	t.logger.Printf("Error occurred (retry %d/%d): %v. Backing off for %v",
+	t.logger.Warn("Error occurred (retry %d/%d): %v. Backing off for %v",
 		t.retryCount, t.maxRetries, err, backoff)
 
 	t.lastErrorTime = &now
@@ -291,34 +282,32 @@ func (t *Transformer) Stop() {
 }
 
 func (t *Transformer) insertTable(tx *sql.Tx, table string, data any) error {
-	t.logger.Printf("building insert for table: %v, data: %v", table, data)
+	t.logger.Debug("Building insert for table: %v, data: %v", table, data)
 	query, args, err := dbutil.BuildInsert(table, data)
 	if err != nil {
 		return err
 	}
-	t.logger.Printf("executing insert: %v", query)
-	res, err := tx.Exec(query, args...)
-	t.logger.Printf("insert error: %v", err)
+	t.logger.Debug("Executing insert: %v, args: %v", query, args)
+	_, err = tx.Exec(query, args...)
 	if err != nil {
+		t.logger.Error("DB insert error: %v", err)
 		return err
 	}
-	t.logger.Printf("insert result: %v", res)
 	return nil
 }
 
 func (t *Transformer) updateTable(tx *sql.Tx, table string, data any) error {
-	t.logger.Printf("building update")
+	t.logger.Debug("Building update for table: %v, data: %v", table, data)
 	query, args, err := dbutil.BuildUpdate(table, data, []string{"id"})
 	if err != nil {
 		return err
 	}
-	t.logger.Printf("executing update: %v", query)
-	res, err := tx.Exec(query, args...)
-	t.logger.Printf("update error: %v", err)
+	t.logger.Debug("Executing update: %v, args: %v", query, args)
+	_, err = tx.Exec(query, args...)
 	if err != nil {
+		t.logger.Error("DB update error: %v", err)
 		return err
 	}
-	t.logger.Printf("update result: %v", res)
 	return nil
 }
 
