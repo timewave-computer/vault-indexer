@@ -1,4 +1,4 @@
-package indexer
+package dbutil
 
 import (
 	"encoding/base64"
@@ -9,11 +9,7 @@ import (
 	"github.com/timewave/vault-indexer/go-indexer/database"
 )
 
-func ptr[T any](v T) *T {
-	return &v
-}
-
-func parseQuotedBased64Json(event database.PublicEventsSelect) (map[string]interface{}, error) {
+func ParseQuotedBased64Json(event database.PublicEventsSelect) (map[string]interface{}, error) {
 
 	rawBytes, ok := event.RawData.([]uint8)
 	if !ok {

@@ -4,9 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"math/rand"
-	"strconv"
 	"sync"
 	"time"
 
@@ -14,21 +12,22 @@ import (
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/database"
 	"github.com/timewave/vault-indexer/go-indexer/dbutil"
-	"github.com/timewave/vault-indexer/go-indexer/extractor"
+	transformHandler "github.com/timewave/vault-indexer/go-indexer/event-transform-handler"
 	"github.com/timewave/vault-indexer/go-indexer/logger"
-	positionTransformer "github.com/timewave/vault-indexer/go-indexer/transformer"
+	transformer "github.com/timewave/vault-indexer/go-indexer/transformer"
 )
 
 // Transformer handles processing of raw events into derived data
 type Transformer struct {
-	db                  *supa.Client
-	pgdb                *sql.DB
-	ctx                 context.Context
-	cancel              context.CancelFunc
-	wg                  sync.WaitGroup
-	logger              *logger.Logger
-	positionTransformer *positionTransformer.PositionTransformer
-	eventExtractor      *extractor.EventExtractor
+	db                         *supa.Client
+	pgdb                       *sql.DB
+	ctx                        context.Context
+	cancel                     context.CancelFunc
+	wg                         sync.WaitGroup
+	logger                     *logger.Logger
+	positionTransformer        *transformer.PositionTransformer
+	withdrawRequestTransformer *transformer.WithdrawRequestTransformer
+	transformHandler           *transformHandler.TransformHandler
 
 	// Add retry tracking
 	retryCount    int
@@ -64,6 +63,12 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB) (*Transformer, error) {
 		return nil, err
 	}
 
+	positionTransformer := transformer.NewPositionTransformer(supa)
+	withdrawRequestTransformer := transformer.NewWithdrawRequestTransformer(supa)
+	transferHandler := transformHandler.NewTransferHandler(positionTransformer)
+	withdrawHandler := transformHandler.NewWithdrawHandler(positionTransformer, withdrawRequestTransformer)
+	transformHandler := transformHandler.NewHandler(transferHandler, withdrawHandler)
+
 	return &Transformer{
 		db:                  supa,
 		pgdb:                pgdb,
@@ -73,8 +78,8 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB) (*Transformer, error) {
 		maxRetries:          1,
 		lastError:           nil,
 		retryCount:          1,
-		positionTransformer: positionTransformer.NewPositionTransformer(supa),
-		eventExtractor:      extractor.NewEventExtractor(),
+		positionTransformer: positionTransformer,
+		transformHandler:    transformHandler,
 	}, nil
 }
 
@@ -158,7 +163,7 @@ func (t *Transformer) Start() error {
 						IsProcessed: ptr(true),
 					}
 
-					dbOperations, err := t.computeTransformation(event)
+					dbOperations, err := t.transform(event)
 					if err != nil {
 						t.logger.Printf("Error computing transformation: %v", err)
 						tx.Rollback()
@@ -216,6 +221,30 @@ func (t *Transformer) Start() error {
 
 	}()
 	return nil
+}
+
+func (t *Transformer) transform(event database.PublicEventsSelect) (DatabaseOperations, error) {
+	operations, err := t.transformHandler.Handle(event)
+	if err != nil {
+		return DatabaseOperations{}, err
+	}
+
+	// Convert handler.DatabaseOperations to transformer.DatabaseOperations
+	var dbOps DatabaseOperations
+	for _, insert := range operations.Inserts {
+		dbOps.inserts = append(dbOps.inserts, DBOperation{
+			table: insert.Table,
+			data:  insert.Data,
+		})
+	}
+	for _, update := range operations.Updates {
+		dbOps.updates = append(dbOps.updates, DBOperation{
+			table: update.Table,
+			data:  update.Data,
+		})
+	}
+
+	return dbOps, nil
 }
 
 // handleError manages retry logic and backoff
@@ -293,107 +322,6 @@ func (t *Transformer) updateTable(tx *sql.Tx, table string, data any) error {
 	return nil
 }
 
-func (t *Transformer) computeTransformation(event database.PublicEventsSelect) (DatabaseOperations, error) {
-	var operations DatabaseOperations
-
-	eventData, err := t.eventExtractor.ParseEventData(event.RawData)
-	if err != nil {
-		return operations, err
-	}
-	t.logger.Printf("NEW: %v %v eventData: %v", event.ContractAddress, event.EventName, eventData)
-
-	if event.EventName == "Transfer" {
-		transferData, err := t.eventExtractor.ExtractTransfer(eventData)
-		if err != nil {
-			return operations, err
-		}
-
-		inserts, updates, err := t.positionTransformer.ProcessPositionTransformation(positionTransformer.ProcessPosition{
-			ReceiverAddress: transferData.To,
-			SenderAddress:   transferData.From,
-			ContractAddress: event.ContractAddress,
-			AmountShares:    transferData.Amount,
-			BlockNumber:     uint64(event.BlockNumber),
-		}, false)
-		t.logger.Printf("inserts: %v", inserts)
-		t.logger.Printf("updates: %v", updates)
-
-		if err != nil {
-			return operations, err
-		}
-
-		if len(inserts) > 0 {
-			operations.inserts = append(operations.inserts, DBOperation{
-				table: "positions",
-				data:  inserts,
-			})
-		}
-		if len(updates) > 0 {
-			operations.updates = append(operations.updates, DBOperation{
-				table: "positions",
-				data:  updates,
-			})
-		}
-
-		return operations, nil
-
-	} else if event.EventName == "WithdrawRequested" {
-		withdrawData, err := t.eventExtractor.ExtractWithdraw(eventData)
-		if err != nil {
-			return operations, err
-		}
-
-		withdrawIdNum, err := strconv.ParseInt(withdrawData.WithdrawID, 10, 64)
-		if err != nil {
-			return operations, fmt.Errorf("failed to parse withdraw id: %v", err)
-		}
-
-		inserts, updates, err := t.positionTransformer.ProcessPositionTransformation(positionTransformer.ProcessPosition{
-			ReceiverAddress: withdrawData.Receiver,
-			SenderAddress:   withdrawData.Owner,
-			ContractAddress: event.ContractAddress,
-			AmountShares:    withdrawData.Amount,
-			BlockNumber:     uint64(event.BlockNumber),
-		}, true)
-		if err != nil {
-			return operations, err
-		}
-		t.logger.Printf("inserts: %v", inserts)
-		t.logger.Printf("updates: %v", updates)
-
-		if len(inserts) > 0 {
-			operations.inserts = append(operations.inserts, DBOperation{
-				table: "positions",
-				data:  inserts,
-			})
-		}
-
-		if len(updates) > 0 {
-			operations.updates = append(operations.updates, DBOperation{
-				table: "positions",
-				data:  updates,
-			})
-		}
-
-		withdrawRequest := database.PublicWithdrawRequestsInsert{
-			Amount:          withdrawData.Amount,
-			BlockNumber:     int64(event.BlockNumber),
-			ContractAddress: event.ContractAddress,
-			OwnerAddress:    withdrawData.Owner,
-			ReceiverAddress: withdrawData.Receiver,
-			WithdrawId:      withdrawIdNum,
-		}
-		operations.inserts = append(operations.inserts, DBOperation{
-			table: "withdraw_requests",
-			data:  withdrawRequest,
-		})
-
-		return operations, nil
-	}
-
-	return operations, nil
-}
-
 type DBOperation struct {
 	table string
 	data  any
@@ -402,4 +330,8 @@ type DBOperation struct {
 type DatabaseOperations struct {
 	inserts []DBOperation
 	updates []DBOperation
+}
+
+func ptr[T any](v T) *T {
+	return &v
 }
