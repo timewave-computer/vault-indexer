@@ -87,6 +87,27 @@ nix run .#indexer
 go test ./...  
 
 go test ./go-indexer/indexer -v
+
+```
+
+## Health checks
+Health checks should be deployed for every process. Currently there are only 2:
+1. historicla loading + event ingestion (main routine) 
+```bash
+curl http://localhost:8080/health
+```
+2. event processing (transform.go)
+```bash
+curl http://localhost:8081/health
+```
+
+## Deploying
+1. stop server + update
+2. run database migration [doc](https://supabase.com/docs/guides/deployment/database-migrations#deploy-your-project)
+3. if you don't want to refetch all historical events, update `go-indexer/config/config.yaml` to fetch events after a specific block
+4. restart server
+```
+
 ```
 
 # API server

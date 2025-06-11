@@ -3,6 +3,7 @@ package indexer
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/timewave/vault-indexer/go-indexer/database"
 	"github.com/timewave/vault-indexer/go-indexer/dbutil"
 	transformHandler "github.com/timewave/vault-indexer/go-indexer/event-transform-handler"
+	"github.com/timewave/vault-indexer/go-indexer/health"
 	"github.com/timewave/vault-indexer/go-indexer/logger"
 	transformer "github.com/timewave/vault-indexer/go-indexer/transformer"
 )
@@ -25,6 +27,7 @@ type Transformer struct {
 	wg               sync.WaitGroup
 	logger           *logger.Logger
 	transformHandler *transformHandler.TransformHandler
+	healthServer     *health.Server
 
 	// Add retry tracking
 	retryCount    int
@@ -58,6 +61,9 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB) (*Transformer, error) {
 	// initialize transform handler
 	transformHandler := transformHandler.NewHandler(transferHandler, withdrawHandler)
 
+	// Create health check server
+	healthServer := health.NewServer(8081, "transformer") // Different port for transformer health checks
+
 	return &Transformer{
 		db:               supa,
 		pgdb:             pgdb,
@@ -68,12 +74,19 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB) (*Transformer, error) {
 		lastError:        nil,
 		retryCount:       0,
 		transformHandler: transformHandler,
+		healthServer:     healthServer,
 	}, nil
 }
 
 // Start begins the transformation process
 func (t *Transformer) Start() error {
 	t.logger.Info("Starting transformer...")
+
+	// Start health check server
+	if err := t.healthServer.Start(); err != nil {
+		return fmt.Errorf("failed to start health check server: %w", err)
+	}
+
 	t.wg.Add(1)
 	go func() {
 		defer t.wg.Done()
@@ -94,6 +107,7 @@ func (t *Transformer) Start() error {
 				`)
 				if err != nil {
 					t.handleError(err)
+					t.healthServer.SetStatus("unhealthy")
 					continue
 				}
 
@@ -205,10 +219,10 @@ func (t *Transformer) Start() error {
 					t.lastError = nil
 				}
 
+				// Update health status after successful processing
+				t.healthServer.SetStatus("healthy")
 			}
-
 		}
-
 	}()
 	return nil
 }
@@ -276,6 +290,12 @@ func (t *Transformer) handleError(err error) {
 func (t *Transformer) Stop() {
 	t.cancel()
 	t.wg.Wait()
+
+	// Stop health check server
+	if err := t.healthServer.Stop(); err != nil {
+		t.logger.Error("Error stopping health check server: %v", err)
+	}
+
 	if t.pgdb != nil {
 		t.pgdb.Close()
 	}
