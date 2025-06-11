@@ -129,6 +129,11 @@ func (i *Indexer) Start() error {
 		return fmt.Errorf("failed to start transformer: %w", err)
 	}
 
+	go func() {
+		<-i.transformer.ctx.Done()
+		i.transformer.Stop()
+	}()
+
 	return nil
 }
 
