@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/config"
+	"github.com/timewave/vault-indexer/go-indexer/health"
 	"github.com/timewave/vault-indexer/go-indexer/logger"
 )
 
@@ -36,6 +37,7 @@ type Indexer struct {
 	transformer    *Transformer
 	wg             sync.WaitGroup
 	logger         *logger.Logger
+	healthServer   *health.Server
 }
 
 func New(cfg *config.Config) (*Indexer, error) {
@@ -69,6 +71,9 @@ func New(cfg *config.Config) (*Indexer, error) {
 		return nil, fmt.Errorf("failed to create transformer: %w", err)
 	}
 
+	// Create health check server
+	healthServer := health.NewServer(8080, "event_ingestion") // Default port for indexer health checks
+
 	return &Indexer{
 		config:         cfg,
 		postgresClient: postgresClient,
@@ -79,17 +84,28 @@ func New(cfg *config.Config) (*Indexer, error) {
 		eventProcessor: eventProcessor,
 		transformer:    transformer,
 		logger:         logger.NewLogger("Indexer"),
+		healthServer:   healthServer,
 	}, nil
 }
 
 func (i *Indexer) Start() error {
 	i.logger.Info("Starting indexer...")
 
+	// Start health check server
+	if err := i.healthServer.Start(); err != nil {
+		return fmt.Errorf("failed to start health check server: %w", err)
+	}
+
 	// Perform health check by getting current block height
 	blockNumber, err := i.ethClient.BlockNumber(i.ctx)
 	if err != nil {
+		i.healthServer.SetStatus("unhealthy")
+
+		_ = i.healthServer.Stop() // best-effort cleanup
 		return fmt.Errorf("health check failed: %w", err)
+
 	}
+	i.healthServer.SetStatus("healthy")
 	i.logger.Info("Health check successful - Current block height: %d", blockNumber)
 
 	i.logger.Info("Processing historical events for %d contracts...", len(i.config.Contracts))
@@ -115,6 +131,11 @@ func (i *Indexer) Start() error {
 	if err := i.transformer.Start(); err != nil {
 		return fmt.Errorf("failed to start transformer: %w", err)
 	}
+
+	go func() {
+		<-i.transformer.ctx.Done()
+		i.transformer.Stop()
+	}()
 
 	return nil
 }
@@ -235,6 +256,11 @@ func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error 
 
 func (i *Indexer) Stop() error {
 	i.logger.Info("Stopping indexer...")
+
+	// Stop health check server
+	if err := i.healthServer.Stop(); err != nil {
+		i.logger.Error("Error stopping health check server: %v", err)
+	}
 
 	// signal writers to stop
 	i.cancel()
