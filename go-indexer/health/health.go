@@ -3,6 +3,7 @@ package health
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -43,8 +44,16 @@ func NewServer(port int, label string) *Server {
 // Start starts the health check server
 func (s *Server) Start() error {
 	s.logger.Info("Starting health check server on port %d for %s", s.port, s.label)
+
+	// Create a listener first to check if we can bind to the port
+	listener, err := net.Listen("tcp", s.server.Addr)
+	if err != nil {
+		return fmt.Errorf("failed to bind to port %d: %w", s.port, err)
+	}
+
+	// Start the server in a goroutine
 	go func() {
-		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := s.server.Serve(listener); err != nil && err != http.ErrServerClosed {
 			s.logger.Error("Health check server error: %v", err)
 		}
 	}()

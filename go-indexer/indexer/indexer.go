@@ -100,7 +100,10 @@ func (i *Indexer) Start() error {
 	blockNumber, err := i.ethClient.BlockNumber(i.ctx)
 	if err != nil {
 		i.healthServer.SetStatus("unhealthy")
+
+		_ = i.healthServer.Stop() // best-effort cleanup
 		return fmt.Errorf("health check failed: %w", err)
+
 	}
 	i.healthServer.SetStatus("healthy")
 	i.logger.Info("Health check successful - Current block height: %d", blockNumber)
