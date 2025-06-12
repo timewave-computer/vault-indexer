@@ -47,6 +47,12 @@ export const { GET } = defineRoute({
       description: "List of account addresses",
       content: z.array(z.string())
       },
+      400: {
+        description: "Bad request",
+        content: z.object({
+          error: z.string(),
+        }),
+      },
     }
 
 })

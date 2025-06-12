@@ -1,7 +1,6 @@
-import { ApiReferenceReact } from '@scalar/api-reference-react'
 import generateOpenApiSpec  from '@omer-x/next-openapi-json-generator'
 import { paginationSchema } from '@/app/types'
-import '@scalar/api-reference-react/style.css'
+import { ApiDocs } from '@/app/ui';
 
 export default async function DocsHome() {
 
@@ -37,9 +36,7 @@ export default async function DocsHome() {
       }
 
 
-    return <ApiReferenceReact configuration={
-     spec
-    } />
+    return <ApiDocs spec={spec} />
 }
 
 

@@ -41,7 +41,7 @@ export const { GET } = defineRoute({
         amount,
         block_number,
         owner_address,
-        receiver_address,
+        receiver_address
       `).eq('contract_address', vaultAddress)
         .limit(Number(limit))
 
