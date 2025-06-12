@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@scalar/types": "^0.2.2",
     "@types/node": "^20",
     "@types/react": "19.1.6",
     "eslint": "^9",
