@@ -49,6 +49,9 @@ npx supabase stop --no-backup ## drops DB
 docker stop $(docker ps -a -q)
 docker rm $(docker ps -a -q)
 docker network prune
+
+docker volume ls
+docker volume rm <volume name>
 ```
 
 ## Indexer
@@ -134,10 +137,8 @@ npm run dev
 ```
 Visit the api at `localhost:3000/v1`
 
-## Updating API schema
-The automated process fails in deployment, so this is a temporary approach.
+## API docs and schema
+Docs served at `/docs`. Generated automatically
 
-- visit `/api-gen` locally and copy static file
-- paste in `public/openapi.json`
 
 
