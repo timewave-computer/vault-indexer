@@ -35,7 +35,6 @@ export default async function DocsHome() {
         },
       }
 
-
     return <ApiDocs spec={spec} />
 }
 

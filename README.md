@@ -49,6 +49,9 @@ npx supabase stop --no-backup ## drops DB
 docker stop $(docker ps -a -q)
 docker rm $(docker ps -a -q)
 docker network prune
+
+docker volume ls
+docker volume rm <volume name>
 ```
 
 ## Indexer
