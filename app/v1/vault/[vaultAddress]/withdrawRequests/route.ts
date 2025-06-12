@@ -6,7 +6,7 @@ import { paginationSchema } from "@/app/types"
 import defineRoute from "@omer-x/next-openapi-route-handler";
 import { z } from "zod";
 
-export const getWithdrawRequestsResponseSchema = z.object({
+ const getWithdrawRequestsResponseSchema = z.object({
   data: z.array(z.object({
     id: z.string(),
     amount: z.string(),

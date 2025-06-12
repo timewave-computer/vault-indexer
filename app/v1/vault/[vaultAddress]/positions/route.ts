@@ -1,15 +1,14 @@
 import supabase from "@/app/supabase"
 import { z } from 'zod'
-import { type NextRequest } from 'next/server'
 import { isAddress } from 'ethers'
 import { paginationSchema } from "@/app/types"
 import defineRoute from "@omer-x/next-openapi-route-handler";
 
-export const getPositionsQuerySchema = paginationSchema.extend({
+const getPositionsQuerySchema = paginationSchema.extend({
   owner_address: z.string().optional(),
 })
 
-export const getPositionsResponseSchema = z.object({
+ const getPositionsResponseSchema = z.object({
   data: z.array(z.object({
     id: z.number(),
     amount_shares: z.number(),
@@ -97,50 +96,3 @@ export const { GET } = defineRoute({
   },
 })
 
-
- async function GE(request: NextRequest,
-  { params }: { params: Promise<{ vaultAddress: string }> }
-) {
-  try {
-    const { vaultAddress } = await params
-
-    if (!isAddress(vaultAddress)) {
-      throw new Error('Invalid vault address')
-    }
-    const searchParams = request.nextUrl.searchParams
-    const { owner_address, from, limit, order } = getPositionsQuerySchema.parse(Object.fromEntries(searchParams.entries()))
-
-    const query = supabase.from('positions').select(`
-      id:position_index_id,
-      amount_shares,
-      position_start_height,
-      position_end_height,
-      owner_address,
-      withdraw_receiver_address,
-      created_at
-  `).eq('contract_address', vaultAddress)
-    .limit(Number(limit))
-
-
-    if (owner_address) {
-      if (!isAddress(owner_address)) {  throw new Error('Invalid owner address') }
-      query.eq('owner_address', owner_address)
-    }
-    if (order === 'desc') {
-      query.order('position_index_id', { ascending: false }).lte('position_index_id', from)
-    } else {
-      query.order('position_index_id', { ascending: true }).gte('position_index_id', from)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      throw Error(error.message)
-    }
-    return Response.json({ data })
-
-  } catch (e) {
-    const error = e as Error
-    return Response.json({ error: error.message }, { status: 400 })
-  }
-}
