@@ -16,7 +16,6 @@ const getPositionsQuerySchema = paginationSchema.extend({
     position_end_height: z.number(),
     owner_address: z.string(),
     withdraw_receiver_address: z.string(),
-    created_at: z.string(),
     is_terminated: z.boolean().nullable(),
   })),
 })
@@ -54,7 +53,6 @@ export const { GET } = defineRoute({
         position_end_height,
         owner_address,
         withdraw_receiver_address,
-        created_at,
         is_terminated
     `).eq('contract_address', vaultAddress)
       .limit(Number(limit))

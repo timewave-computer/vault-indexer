@@ -135,6 +135,7 @@ npm run dev
 Visit the api at `localhost:3000/v1`
 
 ## API docs and schema
-Docs served at `/docs`. Generated automatically.
+- Docs served at `/docs`. Generated automatically
+- To refresh locally, restart the app
 
 
