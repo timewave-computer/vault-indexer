@@ -1,18 +1,23 @@
-import { createSwaggerSpec } from "next-swagger-doc";
+import generateOpenApiSpec from "@omer-x/next-openapi-json-generator";
+import { paginationSchema } from "@/app/types";
 import path from "path";
 
 const apiFolder = path.join(process.cwd(), "/app/v1/");
 console.log('apiFolder',apiFolder);
 
 export const getApiDocs = async () => {
-  const spec = createSwaggerSpec({
-    apiFolder: "/app/v1/", // Use absolute path with process.cwd()
-    definition: {
-      openapi: "3.0.0",
+  const spec = await generateOpenApiSpec({
+    paginationSchema,
+  });
+
+  console.log('spec',JSON.stringify(spec, null, 2))
+  
+  const config = {
+    content: {...spec,
       info: {
-        title: "Vault Indexer API",
-        version: "1.0",
-        description: "API documentation for the Vault Indexer service",
+        title: 'Vault Indexer API',
+        description: 'API documentation for the Vault Indexer',
+        version: '1.0.0'
       },
       components: {
         securitySchemes: {
@@ -30,6 +35,6 @@ export const getApiDocs = async () => {
         }
       ]
     },
-  });
-  return spec;
+  }
+  return config
 };

@@ -1,74 +1,30 @@
-import { type NextRequest } from 'next/server'
 import { isAddress } from 'ethers'
 import { paginationSchema } from "@/app/types"
 import { sql } from '@/app/postgres'
+import defineRoute from "@omer-x/next-openapi-route-handler";
+import z from "zod";
 
-/**
- * @swagger
- * /v1/vault/{vaultAddress}/accounts:
- *   get:
- *     summary: Get accounts for a specific vault
- *     description: Retrieves accounts for a given vault address with pagination
- *     parameters:
- *       - in: path
- *         name: vaultAddress
- *         required: true
- *         schema:
- *           type: string
- *         description: Ethereum address of the vault
- *       - in: query
- *         name: from
- *         schema:
- *           type: integer
- *         description: Starting account index for pagination
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *         description: Number of records to return
- *       - in: query
- *         name: order
- *         schema:
- *           type: string
- *           enum: [asc, desc]
- *         description: Sort order
- *     responses:
- *       200:
- *         description: List of account addresses
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   owner_address:
- *                     type: string
- *                     description: Ethereum address of the account owner
- *       400:
- *         description: Invalid request parameters
- *       500:
- *         description: Not implemented
- */
+export const { GET } = defineRoute({
+  method: "GET",
+  operationId: "accounts",
+  tags: ["vault"],
+  summary: "Get all ethereum addresses that have held a position in a vault",
+  description: "Retrieves accounts for a given vault address with pagination",
+  pathParams: z.object({
+    vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  }),
+  queryParams: paginationSchema,
+  action: async({pathParams, queryParams}) => {
+    try {
+      const vaultAddress  = pathParams.vaultAddress
+      if (!isAddress(vaultAddress)) {
+        throw new Error('Invalid ethereum address')
+      }
+  
 
-const querySchema = paginationSchema
-
-
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ vaultAddress: string }> }
-) {
-  try {
-    const { vaultAddress } = await params
-    if (!isAddress(vaultAddress)) {
-      throw new Error('Invalid ethereum address')
-    }
-    const searchParams = request.nextUrl.searchParams
-
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { from, limit, order } = querySchema.parse(Object.fromEntries(searchParams.entries()))
-
-    const response = await sql`
+      const { from, limit, order } = queryParams
+  
+      const response = await sql`
       SELECT DISTINCT owner_address
       FROM positions
       WHERE contract_address = ${vaultAddress}
@@ -78,8 +34,21 @@ export async function GET(
     `
     return Response.json( response.map(r => r.owner_address), { status: 200 })
 
-  } catch (e) {
-    const error = e as Error
-    return Response.json({ error: error.message }, { status: 400 })
-  }
-}
+    }
+    catch (e) {
+      const error = e as Error
+      return Response.json({ error: error.message }, { status: 400 })
+    }
+
+
+  },
+  responses: {
+    200: {
+      description: "List of account addresses",
+      content: z.array(z.string())
+      },
+    }
+
+})
+
+

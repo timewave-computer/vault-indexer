@@ -85,7 +85,7 @@ import { paginationSchema } from "@/app/types"
  *                   description: Error message describing what went wrong
  */
 
-const querySchema = paginationSchema.extend({
+export const getPositionsQuerySchema = paginationSchema.extend({
   owner_address: z.string().optional(),
 })
 
@@ -99,7 +99,7 @@ export async function GET(request: NextRequest,
       throw new Error('Invalid vault address')
     }
     const searchParams = request.nextUrl.searchParams
-    const { owner_address, from, limit, order } = querySchema.parse(Object.fromEntries(searchParams.entries()))
+    const { owner_address, from, limit, order } = getPositionsQuerySchema.parse(Object.fromEntries(searchParams.entries()))
 
     const query = supabase.from('positions').select(`
       id:position_index_id,

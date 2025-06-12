@@ -1,8 +1,6 @@
 import { ApiReference } from "@scalar/nextjs-api-reference";
+import { getApiDocs } from "@/app/lib";
 
-const config = {
-  pageTitle: 'Vault Indexer API',
-  description: 'API documentation for the Vault Indexer',
-    url: '/openapi.json',
-  }
+const config = await getApiDocs()
+
 export const GET = ApiReference(config)
