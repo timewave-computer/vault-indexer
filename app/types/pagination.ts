@@ -5,3 +5,4 @@ export const paginationSchema = z.object({
     limit: z.coerce.number().optional().default(100),
     order: z.enum(['asc', 'desc']).optional().default('asc'),
 })
+

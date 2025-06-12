@@ -1,6 +1,6 @@
 import { ApiReference } from "@scalar/nextjs-api-reference";
-import { getApiDocs } from "@/app/lib";
+import { makeOpenApiSpec } from "@/app/lib";
 
-const config = await getApiDocs()
+const openApiSpec = await makeOpenApiSpec()
 
-export const GET = ApiReference(config)
+export const GET = ApiReference(openApiSpec)

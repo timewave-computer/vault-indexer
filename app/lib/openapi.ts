@@ -1,22 +1,18 @@
 import generateOpenApiSpec from "@omer-x/next-openapi-json-generator";
 import { paginationSchema } from "@/app/types";
-import path from "path";
 
-const apiFolder = path.join(process.cwd(), "/app/v1/");
-console.log('apiFolder',apiFolder);
-
-export const getApiDocs = async () => {
+export const makeOpenApiSpec = async () => {
   const spec = await generateOpenApiSpec({
     paginationSchema,
   });
-
-  console.log('spec',JSON.stringify(spec, null, 2))
   
   const config = {
-    content: {...spec,
+    pageTitle: 'Valence Indexer API',
+    content: {
+      ...spec,
       info: {
-        title: 'Vault Indexer API',
-        description: 'API documentation for the Vault Indexer',
+        title: 'ValenceIndexer API',
+        description: "API documentation for the Vault Indexer. The Vault Indexer is a service that indexes vaults created on Ethereum using Valence Protocol.",
         version: '1.0.0'
       },
       components: {

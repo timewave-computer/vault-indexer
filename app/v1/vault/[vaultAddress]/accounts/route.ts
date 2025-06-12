@@ -4,12 +4,13 @@ import { sql } from '@/app/postgres'
 import defineRoute from "@omer-x/next-openapi-route-handler";
 import z from "zod";
 
+
 export const { GET } = defineRoute({
   method: "GET",
-  operationId: "accounts",
-  tags: ["vault"],
-  summary: "Get all ethereum addresses that have held a position in a vault",
-  description: "Retrieves accounts for a given vault address with pagination",
+  operationId: "getAccounts",
+  tags: ["/v1/vault"],
+  summary: "Accounts",
+  description: "Get all ethereum addresses that have held a position in a vault",
   pathParams: z.object({
     vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
   }),
@@ -18,10 +19,9 @@ export const { GET } = defineRoute({
     try {
       const vaultAddress  = pathParams.vaultAddress
       if (!isAddress(vaultAddress)) {
-        throw new Error('Invalid ethereum address')
+        throw new Error('Vault address is invalid ethereum address')
       }
   
-
       const { from, limit, order } = queryParams
   
       const response = await sql`
