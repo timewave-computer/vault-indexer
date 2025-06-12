@@ -11,7 +11,7 @@ export const makeOpenApiSpec = async () => {
     content: {
       ...spec,
       info: {
-        title: 'ValenceIndexer API',
+        title: 'Valence Indexer API',
         description: "API documentation for the Vault Indexer. The Vault Indexer is a service that indexes vaults created on Ethereum using Valence Protocol.",
         version: '1.0.0'
       },
