@@ -42,12 +42,15 @@ type Indexer struct {
 
 func New(cfg *config.Config) (*Indexer, error) {
 	ctx, cancel := context.WithCancel(context.Background())
+	fmt.Println("Created context")
 
 	ethClient, err := ethclient.Dial(cfg.Ethereum.WebsocketURL)
+	fmt.Println("Dialed to Ethereum websocket")
 	if err != nil {
 		cancel()
 		return nil, err
 	}
+	fmt.Println("Connected to Ethereum websocket")
 
 	// Connect to Supabase
 	supabaseClient, err := supa.NewClient(cfg.Database.SupabaseURL, cfg.Database.SupabaseKey, &supa.ClientOptions{})
@@ -55,6 +58,7 @@ func New(cfg *config.Config) (*Indexer, error) {
 		cancel()
 		return nil, fmt.Errorf("failed to connect to Supabase: %w", err)
 	}
+	fmt.Println("Connected to supabase client")
 
 	// Create processors
 	eventProcessor := NewEventProcessor(supabaseClient, ethClient)
@@ -64,6 +68,7 @@ func New(cfg *config.Config) (*Indexer, error) {
 		cancel()
 		return nil, fmt.Errorf("failed to connect to Postgres: %w", err)
 	}
+	fmt.Println("Connected to pgdb")
 
 	transformer, err := NewTransformer(supabaseClient, postgresClient)
 	if err != nil {
