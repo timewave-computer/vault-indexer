@@ -131,11 +131,12 @@ func (p *PositionTransformer) ComputeTransfer(args ProcessPosition, senderPositi
 
 		// update receiver position
 		insert, update, err := p.UpdatePosition(UpdatePositionInput{
-			CurrentPosition: receiverPosition,
-			Address:         args.ReceiverAddress,
-			AmountShares:    args.AmountShares,
-			BlockNumber:     args.BlockNumber,
-			IsAddition:      true,
+			CurrentPosition:         receiverPosition,
+			Address:                 args.ReceiverAddress,
+			AmountShares:            args.AmountShares,
+			BlockNumber:             args.BlockNumber,
+			IsAddition:              true,
+			WithdrawReceiverAddress: nil,
 		}, &positionIndexId)
 		if err != nil {
 			p.logger.Error("Error updating position: %v", err)
@@ -261,16 +262,11 @@ func (p *PositionTransformer) UpdatePosition(
 
 	p.logger.Debug("insert value: %v", insert)
 
-	var receiverAddress string
-	if input.WithdrawReceiverAddress != nil {
-		receiverAddress = *input.WithdrawReceiverAddress
-	}
-
 	update = database.ToPositionUpdate(database.PublicPositionsUpdate{
 		Id:                      &input.CurrentPosition.Id,
 		IsTerminated:            &isTerminated,
 		PositionEndHeight:       &endHeight,
-		WithdrawReceiverAddress: &receiverAddress,
+		WithdrawReceiverAddress: input.WithdrawReceiverAddress,
 	})
 
 	return insert, &update, nil

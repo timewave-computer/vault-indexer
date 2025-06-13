@@ -93,9 +93,10 @@ func TestProcessDeposit(t *testing.T) {
 
 		var expectedUpdates = []database.PositionUpdate{
 			{
-				Id:                receiverPosition.Id,
-				PositionEndHeight: 1999,
-				IsTerminated:      false,
+				Id:                      receiverPosition.Id,
+				PositionEndHeight:       1999,
+				IsTerminated:            false,
+				WithdrawReceiverAddress: nil,
 			},
 		}
 		var expectedInserts = []database.PositionInsert{
@@ -148,9 +149,10 @@ func TestProcessTransfer(t *testing.T) {
 
 		var expectedUpdates = []database.PositionUpdate{
 			{
-				Id:                senderPosition.Id,
-				PositionEndHeight: 1999,
-				IsTerminated:      true,
+				Id:                      senderPosition.Id,
+				PositionEndHeight:       1999,
+				IsTerminated:            true,
+				WithdrawReceiverAddress: nil,
 			},
 		}
 
@@ -205,14 +207,16 @@ func TestProcessTransfer(t *testing.T) {
 
 		var expectedUpdates = []database.PositionUpdate{
 			{
-				Id:                receiverPosition.Id,
-				PositionEndHeight: 1999,
-				IsTerminated:      false,
+				Id:                      receiverPosition.Id,
+				PositionEndHeight:       1999,
+				IsTerminated:            false,
+				WithdrawReceiverAddress: nil,
 			},
 			{
-				Id:                senderPosition.Id,
-				PositionEndHeight: 1999,
-				IsTerminated:      true,
+				Id:                      senderPosition.Id,
+				PositionEndHeight:       1999,
+				IsTerminated:            true,
+				WithdrawReceiverAddress: nil,
 			},
 		}
 
@@ -274,14 +278,16 @@ func TestProcessTransfer(t *testing.T) {
 
 		var expectedUpdates = []database.PositionUpdate{
 			{
-				Id:                receiverPosition.Id,
-				PositionEndHeight: 1999,
-				IsTerminated:      false,
+				Id:                      receiverPosition.Id,
+				PositionEndHeight:       1999,
+				IsTerminated:            false,
+				WithdrawReceiverAddress: nil,
 			},
 			{
-				Id:                senderPosition.Id,
-				PositionEndHeight: 1999,
-				IsTerminated:      false,
+				Id:                      senderPosition.Id,
+				PositionEndHeight:       1999,
+				IsTerminated:            false,
+				WithdrawReceiverAddress: nil,
 			},
 		}
 
@@ -319,7 +325,7 @@ func TestProcessWithdraw(t *testing.T) {
 				Id:                      currentPosition.Id,
 				PositionEndHeight:       1999,
 				IsTerminated:            false,
-				WithdrawReceiverAddress: NeutronAddress1,
+				WithdrawReceiverAddress: toStringPtr(NeutronAddress1),
 			},
 		}
 		var expectedInserts = []database.PositionInsert{
@@ -362,7 +368,7 @@ func TestProcessWithdraw(t *testing.T) {
 				Id:                      senderPosition.Id,
 				PositionEndHeight:       1999,
 				IsTerminated:            true,
-				WithdrawReceiverAddress: NeutronAddress1,
+				WithdrawReceiverAddress: toStringPtr(NeutronAddress1),
 			},
 		}
 
@@ -417,9 +423,10 @@ func TestUpdatePosition(t *testing.T) {
 		}
 
 		expectedUpdate := &database.PositionUpdate{
-			Id:                currentPosition.Id,
-			PositionEndHeight: 1999,
-			IsTerminated:      false,
+			Id:                      currentPosition.Id,
+			PositionEndHeight:       1999,
+			IsTerminated:            false,
+			WithdrawReceiverAddress: nil,
 		}
 
 		assert.Equal(t, expectedInsert, insert)
@@ -448,9 +455,10 @@ func TestUpdatePosition(t *testing.T) {
 		}, toInt64Ptr(0))
 
 		expectedUpdate := &database.PositionUpdate{
-			Id:                currentPosition.Id,
-			PositionEndHeight: 1999,
-			IsTerminated:      true,
+			Id:                      currentPosition.Id,
+			PositionEndHeight:       1999,
+			IsTerminated:            true,
+			WithdrawReceiverAddress: nil,
 		}
 
 		assert.Nil(t, insert)
