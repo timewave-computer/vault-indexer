@@ -23,6 +23,7 @@ npx supabase status
 
 ### Deploy schema change 
 ```bash
+npx suapbase migration new <name>
 npx supabase migration up
 ```
 

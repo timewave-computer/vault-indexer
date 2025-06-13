@@ -17,15 +17,17 @@ type Handler interface {
 
 // EventHandler is the main handler that routes events to specific handlers
 type TransformHandler struct {
-	transferHandler *TransferHandler
-	withdrawHandler *WithdrawHandler
+	transferHandler   *TransferHandler
+	withdrawHandler   *WithdrawHandler
+	rateUpdateHandler *RateUpdateHandler
 }
 
 // NewEventHandler creates a new event handler
-func NewHandler(transferHandler *TransferHandler, withdrawHandler *WithdrawHandler) *TransformHandler {
+func NewHandler(transferHandler *TransferHandler, withdrawHandler *WithdrawHandler, rateUpdateHandler *RateUpdateHandler) *TransformHandler {
 	return &TransformHandler{
-		transferHandler: transferHandler,
-		withdrawHandler: withdrawHandler,
+		transferHandler:   transferHandler,
+		withdrawHandler:   withdrawHandler,
+		rateUpdateHandler: rateUpdateHandler,
 	}
 }
 
@@ -41,6 +43,8 @@ func (h *TransformHandler) Handle(event database.PublicEventsSelect) (database.D
 		return h.transferHandler.Handle(event, eventData)
 	case "WithdrawRequested":
 		return h.withdrawHandler.Handle(event, eventData)
+	case "RateUpdated":
+		return h.rateUpdateHandler.Handle(event, eventData)
 	default:
 		return database.DatabaseOperations{}, nil
 	}

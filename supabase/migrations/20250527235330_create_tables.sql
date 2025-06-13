@@ -53,7 +53,8 @@ CREATE TABLE IF NOT EXISTS withdraw_requests (
     owner_address TEXT NOT NULL,
     amount TEXT NOT NULL,
     receiver_address TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (contract_address, withdraw_id)
 );
 CREATE INDEX IF NOT EXISTS idx_withdraw_requests_contract_address ON withdraw_requests(contract_address);
 CREATE INDEX IF NOT EXISTS idx_withdraw_requests_owner_address ON withdraw_requests(owner_address);

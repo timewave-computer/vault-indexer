@@ -110,3 +110,27 @@ type PublicWithdrawRequestsUpdate struct {
   ReceiverAddress *string `json:"receiver_address"`
   WithdrawId      *int64  `json:"withdraw_id"`
 }
+
+type PublicRateUpdatesSelect struct {
+  BlockNumber     int64  `json:"block_number"`
+  ContractAddress string `json:"contract_address"`
+  CreatedAt       string `json:"created_at"`
+  Id              string `json:"id"`
+  Rate            string `json:"rate"`
+}
+
+type PublicRateUpdatesInsert struct {
+  BlockNumber     int64   `json:"block_number"`
+  ContractAddress string  `json:"contract_address"`
+  CreatedAt       *string `json:"created_at"`
+  Id              *string `json:"id"`
+  Rate            string  `json:"rate"`
+}
+
+type PublicRateUpdatesUpdate struct {
+  BlockNumber     *int64  `json:"block_number"`
+  ContractAddress *string `json:"contract_address"`
+  CreatedAt       *string `json:"created_at"`
+  Id              *string `json:"id"`
+  Rate            *string `json:"rate"`
+}
