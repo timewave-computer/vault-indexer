@@ -9,6 +9,7 @@ contracts:
       events:
         - "Transfer"
         - "WithdrawRequested"
+        - "RateUpdated"
     - name: "Vault2"
       address: "0x0B3B3a2C11D6676816fe214B7F23446D12D762FF"
       start_block: 22634425
@@ -16,6 +17,7 @@ contracts:
       events:
         - "Transfer"
         - "WithdrawRequested"
+        - "RateUpdated"
     - name: "Test1"
       address: "0x3EA82BDA12e3cba18E4A9fD0cf7DE2fB78cA4d32"
       start_block: 22694852
@@ -23,3 +25,4 @@ contracts:
       events:
         - "Transfer"
         - "WithdrawRequested"
+        - "RateUpdated"
