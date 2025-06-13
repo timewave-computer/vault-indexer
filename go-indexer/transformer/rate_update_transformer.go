@@ -13,12 +13,13 @@ import (
 type RateUpdateTransformer struct {
 	db        *supa.Client
 	ctx       context.Context
-	cancel    context.CancelFunc
 	ethClient *ethclient.Client
+	cancel    context.CancelFunc
 }
 
 func NewRateUpdateTransformer(db *supa.Client, ethClient *ethclient.Client) *RateUpdateTransformer {
 	ctx, cancel := context.WithCancel(context.Background())
+
 	return &RateUpdateTransformer{
 		db:        db,
 		ctx:       ctx,

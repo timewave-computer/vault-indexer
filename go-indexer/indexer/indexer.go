@@ -246,6 +246,7 @@ func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error 
 						i.logger.Error("Error processing event: %v", err)
 					}
 				case <-i.ctx.Done():
+					sub.Unsubscribe()
 					return
 				}
 			}
@@ -275,5 +276,6 @@ func (i *Indexer) Stop() error {
 	// finally release external resources
 	i.ethClient.Close()
 	i.postgresClient.Close()
+
 	return nil
 }

@@ -14,12 +14,13 @@ import { z } from "zod";
   })),
 })
 
+const MAX_RESULTS = 5000
 export const { GET } = defineRoute({
   method: "GET",
   operationId: "getRates",
   tags: ["/v1/vault"],
   summary: "Vault rates",
-  description: "Fetches rates for a vault. By default, it fetches rates for the last 30 days. You can specify a time range to fetch rates for.",
+  description: `Fetches rates for a vault. By default, it fetches rates for the last 30 days. You can specify a time range to fetch rates for. Maximum output is ${MAX_RESULTS} results.`,
   pathParams: z.object({
     vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('Ethereum address'),
   }),
@@ -34,11 +35,15 @@ export const { GET } = defineRoute({
 
       const { from, to, order } = queryParams
 
+      if (new Date(from) > new Date(to)) {
+        throw new Error("'from' must be earlier than 'to'")
+      }
+
       const query = supabase.from('rate_updates').select(`
         rate,
         block_number,
         block_timestamp
-      `).eq('contract_address', vaultAddress)
+      `).eq('contract_address', vaultAddress).limit(MAX_RESULTS)
 
      query.order('block_number', { ascending: order === 'asc' }).gte('block_timestamp', from).lte('block_timestamp', to)
    
