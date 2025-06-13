@@ -41,8 +41,8 @@ func (e *EventProcessor) Stop() {
 	e.cancel()
 }
 
-func (e *EventProcessor) processEvent(vLog types.Log, event abi.Event, contractName string) error {
-	eventData, err := parseEvent(vLog, event, contractName)
+func (e *EventProcessor) processEvent(vLog types.Log, event abi.Event) error {
+	eventData, err := parseEvent(vLog, event)
 	if err != nil {
 		return fmt.Errorf("failed to process event: %w", err)
 	}
@@ -89,7 +89,7 @@ func (e *EventProcessor) processEvent(vLog types.Log, event abi.Event, contractN
 	}
 }
 
-func parseEvent(vLog types.Log, event abi.Event, contractName string) (*EventIngestionInsert, error) {
+func parseEvent(vLog types.Log, event abi.Event) (*EventIngestionInsert, error) {
 	// Parse the event data
 	eventData := make(map[string]interface{})
 

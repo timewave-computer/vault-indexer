@@ -29,10 +29,6 @@ type Indexer struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
 	postgresClient *sql.DB
-	// positionChan      chan PositionEvent
-	// withdrawChan      chan WithdrawRequestEvent
-	// positionProcessor *PositionProcessor
-	// withdrawProcessor *WithdrawProcessor
 	eventProcessor *EventProcessor
 	transformer    *Transformer
 	wg             sync.WaitGroup
@@ -70,7 +66,7 @@ func New(cfg *config.Config) (*Indexer, error) {
 	}
 	fmt.Println("Connected to pgdb")
 
-	transformer, err := NewTransformer(supabaseClient, postgresClient)
+	transformer, err := NewTransformer(supabaseClient, postgresClient, ethClient)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to create transformer: %w", err)
@@ -197,7 +193,7 @@ func (i *Indexer) loadHistoricalEvents(contract config.ContractConfig) error {
 
 		// Process each log
 		for _, vLog := range logs {
-			if err := i.eventProcessor.processEvent(vLog, event, contract.Name); err != nil {
+			if err := i.eventProcessor.processEvent(vLog, event); err != nil {
 				return fmt.Errorf("failed to process event: %w", err)
 			}
 		}
@@ -246,7 +242,7 @@ func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error 
 					i.logger.Error("Subscription error: %v", err)
 					return
 				case vLog := <-logs:
-					if err := i.eventProcessor.processEvent(vLog, event, contract.Name); err != nil {
+					if err := i.eventProcessor.processEvent(vLog, event); err != nil {
 						i.logger.Error("Error processing event: %v", err)
 					}
 				case <-i.ctx.Done():

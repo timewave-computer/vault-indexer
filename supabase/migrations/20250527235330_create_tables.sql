@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS events (
     log_index INTEGER NOT NULL,
     raw_data JSONB NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    is_processed BOOLEAN DEFAULT FALSE,
     UNIQUE(block_number, log_index)
 );
 
@@ -28,7 +30,7 @@ CREATE TABLE IF NOT EXISTS positions (
     position_start_height BIGINT NOT NULL,
     position_end_height BIGINT,
     amount_shares TEXT NOT NULL,
-    is_terminated BOOLEAN,
+    is_terminated BOOLEAN DEFAULT FALSE NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_positions_contract_address ON positions(contract_address);

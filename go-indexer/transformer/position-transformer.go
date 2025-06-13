@@ -107,9 +107,9 @@ func (p *PositionTransformer) GetMostRecentPosition(address string, contractAddr
 func (p *PositionTransformer) ComputeTransfer(args ProcessPosition, senderPosition *database.PublicPositionsSelect, receiverPosition *database.PublicPositionsSelect, maxPositionIndexId int64) ([]database.PositionInsert, []database.PositionUpdate, error) {
 	var updates []database.PositionUpdate
 	var inserts []database.PositionInsert
-	positionIndexId := maxPositionIndexId
-	p.logger.Debug("maxPositionIndexId: %v", maxPositionIndexId)
+	p.logger.Debug("ComputeTransfer:  senderPosition:%v, receiver position: %v, maxPositionIndexId: %v", args, senderPosition, receiverPosition, maxPositionIndexId)
 
+	positionIndexId := maxPositionIndexId
 	var isTransferWithdraw = args.ReceiverAddress == ZERO_ADDRESS.Hex()
 
 	if isTransferWithdraw {
@@ -117,7 +117,7 @@ func (p *PositionTransformer) ComputeTransfer(args ProcessPosition, senderPositi
 		return inserts, updates, nil
 	}
 
-	if receiverPosition == nil || *receiverPosition.IsTerminated {
+	if receiverPosition == nil || (receiverPosition.IsTerminated != nil && *receiverPosition.IsTerminated) {
 		// create a new position
 		positionIndexId++
 		inserts = append(inserts, database.ToPositionInsert(database.PublicPositionsInsert{

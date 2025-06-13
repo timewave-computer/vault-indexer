@@ -112,6 +112,30 @@ export type Database = {
         }
         Relationships: []
       }
+      rate_updates: {
+        Row: {
+          block_number: number
+          block_timestamp: string
+          contract_address: string
+          id: string
+          rate: string
+        }
+        Insert: {
+          block_number: number
+          block_timestamp: string
+          contract_address: string
+          id?: string
+          rate: string
+        }
+        Update: {
+          block_number?: number
+          block_timestamp?: string
+          contract_address?: string
+          id?: string
+          rate?: string
+        }
+        Relationships: []
+      }
       withdraw_requests: {
         Row: {
           amount: string

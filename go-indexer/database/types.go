@@ -113,24 +113,24 @@ type PublicWithdrawRequestsUpdate struct {
 
 type PublicRateUpdatesSelect struct {
   BlockNumber     int64  `json:"block_number"`
+  BlockTimestamp  string `json:"block_timestamp"`
   ContractAddress string `json:"contract_address"`
-  CreatedAt       string `json:"created_at"`
   Id              string `json:"id"`
   Rate            string `json:"rate"`
 }
 
 type PublicRateUpdatesInsert struct {
   BlockNumber     int64   `json:"block_number"`
+  BlockTimestamp  string  `json:"block_timestamp"`
   ContractAddress string  `json:"contract_address"`
-  CreatedAt       *string `json:"created_at"`
   Id              *string `json:"id"`
   Rate            string  `json:"rate"`
 }
 
 type PublicRateUpdatesUpdate struct {
   BlockNumber     *int64  `json:"block_number"`
+  BlockTimestamp  *string `json:"block_timestamp"`
   ContractAddress *string `json:"contract_address"`
-  CreatedAt       *string `json:"created_at"`
   Id              *string `json:"id"`
   Rate            *string `json:"rate"`
 }
