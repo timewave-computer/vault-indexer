@@ -25,13 +25,13 @@ func NewRateUpdateTransformer(db *supa.Client) *RateUpdateTransformer {
 type ProcessRateUpdate struct {
 	ContractAddress string
 	Rate            string
-	BlockNumber     uint64
+	BlockNumber     int64
 }
 
 func (w *RateUpdateTransformer) Transform(args ProcessRateUpdate) (database.PublicRateUpdatesInsert, error) {
 	// Create the insert struct
 	rateUpdate := database.PublicRateUpdatesInsert{
-		BlockNumber:     int64(args.BlockNumber),
+		BlockNumber:     args.BlockNumber,
 		ContractAddress: args.ContractAddress,
 		Rate:            args.Rate,
 	}

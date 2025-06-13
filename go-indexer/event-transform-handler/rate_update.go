@@ -24,13 +24,13 @@ type RateUpdateData struct {
 
 // extractWithdraw extracts data from a WithdrawRequested event
 func (h *RateUpdateHandler) extract(data database.EventData) (*RateUpdateData, error) {
-	newRate, ok := data["newRate"].(float64)
+	newRate, ok := data["newRate"].(string)
 	if !ok {
 		return nil, fmt.Errorf("newRate not found in rate update event")
 	}
 
 	return &RateUpdateData{
-		Rate: fmt.Sprintf("%.0f", newRate),
+		Rate: newRate,
 	}, nil
 }
 
@@ -47,7 +47,7 @@ func (h *RateUpdateHandler) Handle(event database.PublicEventsSelect, eventData 
 	inserts, err := h.rateUpdateTransformer.Transform(transformer.ProcessRateUpdate{
 		ContractAddress: event.ContractAddress,
 		Rate:            rateUpdateData.Rate,
-		BlockNumber:     uint64(event.BlockNumber),
+		BlockNumber:     event.BlockNumber,
 	})
 
 	if err != nil {
