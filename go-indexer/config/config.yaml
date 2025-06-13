@@ -16,3 +16,10 @@ contracts:
       events:
         - "Transfer"
         - "WithdrawRequested"
+    - name: "Test1"
+      address: "0x3EA82BDA12e3cba18E4A9fD0cf7DE2fB78cA4d32"
+      start_block: 22694852
+      abi_path: "vault.abi.json"
+      events:
+        - "Transfer"
+        - "WithdrawRequested"
