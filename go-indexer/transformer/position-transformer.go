@@ -262,16 +262,11 @@ func (p *PositionTransformer) UpdatePosition(
 
 	p.logger.Debug("insert value: %v", insert)
 
-	var receiverAddress *string = nil
-	if input.WithdrawReceiverAddress != nil {
-		receiverAddress = input.WithdrawReceiverAddress
-	}
-
 	update = database.ToPositionUpdate(database.PublicPositionsUpdate{
 		Id:                      &input.CurrentPosition.Id,
 		IsTerminated:            &isTerminated,
 		PositionEndHeight:       &endHeight,
-		WithdrawReceiverAddress: receiverAddress,
+		WithdrawReceiverAddress: input.WithdrawReceiverAddress,
 	})
 
 	return insert, &update, nil
