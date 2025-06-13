@@ -1,11 +1,12 @@
 import generateOpenApiSpec  from '@omer-x/next-openapi-json-generator'
-import { paginationSchema } from '@/app/types'
+import { paginationSchema, timeRangeSchema } from '@/app/types'
 import { ApiDocs } from '@/app/ui';
 
 export default async function DocsHome() {
 
     const _spec = await generateOpenApiSpec({
         paginationSchema,
+        timeRangeSchema
       });
       
       const spec = {

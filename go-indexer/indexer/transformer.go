@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/ethclient"
 	_ "github.com/lib/pq" // Import PostgreSQL driver
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/database"
@@ -37,7 +38,7 @@ type Transformer struct {
 }
 
 // NewTransformer creates a new transformer instance
-func NewTransformer(supa *supa.Client, pgdb *sql.DB) (*Transformer, error) {
+func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client) (*Transformer, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Configure connection pool
@@ -53,7 +54,7 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB) (*Transformer, error) {
 	// initialize transformers
 	positionTransformer := transformer.NewPositionTransformer(supa)
 	withdrawRequestTransformer := transformer.NewWithdrawRequestTransformer(supa)
-	rateUpdateTransformer := transformer.NewRateUpdateTransformer(supa)
+	rateUpdateTransformer := transformer.NewRateUpdateTransformer(supa, ethClient)
 
 	// initialize event transformer handlers
 	transferHandler := transformHandler.NewTransferHandler(positionTransformer)
@@ -103,7 +104,7 @@ func (t *Transformer) Start() error {
 					id,	block_number, contract_address,event_name, log_index, transaction_hash, raw_data, created_at,
 					last_updated_at, is_processed
 					 FROM events 
-					WHERE is_processed IS NULL 
+					WHERE is_processed is false 
 					ORDER BY block_number ASC, log_index ASC 
 					LIMIT 100
 				`)

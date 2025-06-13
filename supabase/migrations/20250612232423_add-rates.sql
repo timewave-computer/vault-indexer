@@ -3,7 +3,7 @@ CREATE TABLE rate_updates (
     rate TEXT NOT NULL,
     contract_address TEXT NOT NULL,
     block_number BIGINT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    block_timestamp TIMESTAMPTZ NOT NULL,
     UNIQUE(contract_address, block_number)
 );
 
