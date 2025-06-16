@@ -22,42 +22,55 @@
           src = ./.;
           modules = ./gomod2nix.toml;
           doCheck = false;
+          meta.mainProgram = "vault-indexer";
         };
         devshells.default = {
-          commands =
-            [ { package = pkgs.gomod2nix; } { package = pkgs.nixfmt; } ];
+          commands = [
+            { package = pkgs.gomod2nix; }
+            { package = pkgs.nixfmt-classic; }
+            { package = pkgs.supabase-cli; }
+          ];
         };
       };
       flake.nixosModules.vault-indexer = moduleWithSystem ({ self' }:
-        { lib, config, ... }:
+        { lib, config, pkgs, ... }:
         let
+          inherit (lib) types;
           cfg = config.services.vault-indexer;
-        in
-        {
+          package = self'.packages.vault-indexer;
+        in {
           options = {
             services.vault-indexer = {
               enable = lib.mkEnableOption "Vault Indexer";
             };
-
           };
           config = lib.mkIf cfg.enable {
             systemd.services.vault-indexer = {
               description = "vault indexer";
               wantedBy = [ "multi-user.target" ];
               after = [ "network.target" ];
-              environment = {
-                ENV = "prod";
-              };
+              environment = { ENV = "prod"; };
+              path = with pkgs; [ supabase-cli ];
               preStart = ''
                 mkdir -p github.com/timewave/
                 if [[ -d github.com/timewave/vault-indexer ]]; then
-                  unlink github.com/timewave/vault-indexer
+                  rm -rf github.com/timewave/vault-indexer
                 fi
-                ln -s ${self'.packages.vault-indexer.src} github.com/timewave/vault-indexer
-                cp -r ${self'.packages.vault-indexer.src}/abis .
+                ln -s ${package.src} github.com/timewave/vault-indexer
+
+                if [[ -d abis ]]; then
+                  rm -rf abis
+                fi
+                ln -s ${package.src}/abis .
+
+                # Database Migration
+                source .env.prod
+                cd ${package.src}
+                supabase db push --db-url "$INDEXER_POSTGRES_CONNECTION_STRING"
+                cd -
               '';
               serviceConfig = {
-                ExecStart = "${lib.getExe self'.packages.vault-indexer} prod";
+                ExecStart = "${lib.getExe package} prod";
                 StateDirectory = "vault-indexer";
                 WorkingDirectory = "/var/lib/vault-indexer";
               };
