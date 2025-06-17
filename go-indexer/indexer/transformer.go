@@ -57,12 +57,13 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client
 	rateUpdateTransformer := transformer.NewRateUpdateTransformer(supa, ethClient)
 
 	// initialize event transformer handlers
+	depositHandler := transformHandler.NewDepositHandler(positionTransformer)
 	transferHandler := transformHandler.NewTransferHandler(positionTransformer)
 	withdrawHandler := transformHandler.NewWithdrawHandler(positionTransformer, withdrawRequestTransformer)
 	rateUpdateHandler := transformHandler.NewRateUpdateHandler(rateUpdateTransformer)
 
 	// initialize transform handler
-	transformHandler := transformHandler.NewHandler(transferHandler, withdrawHandler, rateUpdateHandler)
+	transformHandler := transformHandler.NewHandler(depositHandler, transferHandler, withdrawHandler, rateUpdateHandler)
 
 	// Create health check server
 	healthServer := health.NewServer(8081, "transformer") // Different port for transformer health checks

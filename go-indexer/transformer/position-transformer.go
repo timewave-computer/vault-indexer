@@ -45,7 +45,18 @@ type ProcessPosition struct {
 	BlockNumber     uint64
 }
 
-func (p *PositionTransformer) Transform(args ProcessPosition, isWithdraw bool) ([]database.PositionInsert, []database.PositionUpdate, error) {
+func (p *PositionTransformer) Transfer(args ProcessPosition) ([]database.PositionInsert, []database.PositionUpdate, error) {
+
+	// mint, handled by Deposit event
+	if args.SenderAddress == ZERO_ADDRESS.Hex() {
+		return nil, nil, nil
+	}
+
+	// burn, handled by Withdraw event
+	if args.ReceiverAddress == ZERO_ADDRESS.Hex() {
+		return nil, nil, nil
+	}
+
 	var receiverPosition *database.PublicPositionsSelect
 	var senderPosition *database.PublicPositionsSelect
 	var maxPositionIndexId int64
@@ -66,11 +77,46 @@ func (p *PositionTransformer) Transform(args ProcessPosition, isWithdraw bool) (
 		return nil, nil, err
 	}
 
-	if isWithdraw {
-		return p.ComputeWithdraw(args, senderPosition, receiverPosition, maxPositionIndexId)
-	} else {
-		return p.ComputeTransfer(args, senderPosition, receiverPosition, maxPositionIndexId)
+	return p.ComputeTransfer(args, senderPosition, receiverPosition, maxPositionIndexId)
+
+}
+
+func (p *PositionTransformer) Withdraw(args ProcessPosition) ([]database.PositionInsert, []database.PositionUpdate, error) {
+	var senderPosition *database.PublicPositionsSelect
+	var maxPositionIndexId int64
+
+	senderPosition, err := p.GetMostRecentPosition(args.SenderAddress, args.ContractAddress)
+	if err != nil {
+		return nil, nil, err
 	}
+
+	maxPositionIndexId, err = p.getMaxPositionIndexId(args.ContractAddress)
+
+	if err != nil {
+		p.logger.Error("Error getting max position index id: %v", err)
+		return nil, nil, err
+	}
+
+	return p.ComputeWithdraw(args, senderPosition, maxPositionIndexId)
+
+}
+
+func (p *PositionTransformer) Deposit(args ProcessPosition) ([]database.PositionInsert, []database.PositionUpdate, error) {
+	var senderPosition *database.PublicPositionsSelect
+	var maxPositionIndexId int64
+
+	senderPosition, err := p.GetMostRecentPosition(args.SenderAddress, args.ContractAddress)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	maxPositionIndexId, err = p.getMaxPositionIndexId(args.ContractAddress)
+	if err != nil {
+		p.logger.Error("Error getting max position index id: %v", err)
+		return nil, nil, err
+	}
+	return p.ComputeDeposit(args, senderPosition, maxPositionIndexId)
+
 }
 
 func (p *PositionTransformer) GetMostRecentPosition(address string, contractAddress string) (*database.PublicPositionsSelect, error) {
@@ -110,12 +156,6 @@ func (p *PositionTransformer) ComputeTransfer(args ProcessPosition, senderPositi
 	p.logger.Debug("ComputeTransfer: args: %v, senderPosition: %v, receiver position: %v, maxPositionIndexId: %v", args, senderPosition, receiverPosition, maxPositionIndexId)
 
 	positionIndexId := maxPositionIndexId
-	var isTransferWithdraw = args.ReceiverAddress == ZERO_ADDRESS.Hex()
-
-	if isTransferWithdraw {
-		// exit early.  This is will written by the withdraw event, which includes the same info + the neutron address
-		return inserts, updates, nil
-	}
 
 	if receiverPosition == nil || (receiverPosition.IsTerminated != nil && *receiverPosition.IsTerminated) {
 		// create a new position
@@ -178,10 +218,10 @@ func (p *PositionTransformer) ComputeTransfer(args ProcessPosition, senderPositi
 	}
 	return inserts, updates, nil
 }
-func (p *PositionTransformer) ComputeWithdraw(args ProcessPosition, senderPosition *database.PublicPositionsSelect, receiverPosition *database.PublicPositionsSelect, maxPositionIndexId int64) ([]database.PositionInsert, []database.PositionUpdate, error) {
+func (p *PositionTransformer) ComputeWithdraw(args ProcessPosition, senderPosition *database.PublicPositionsSelect, maxPositionIndexId int64) ([]database.PositionInsert, []database.PositionUpdate, error) {
 	var updates []database.PositionUpdate
 	var inserts []database.PositionInsert
-	positionIndexId := maxPositionIndexId
+	maxPositionIndexIdPtr := maxPositionIndexId
 
 	p.logger.Debug("computing withdraw. args: %v", args)
 
@@ -193,7 +233,7 @@ func (p *PositionTransformer) ComputeWithdraw(args ProcessPosition, senderPositi
 		BlockNumber:             args.BlockNumber,
 		IsAddition:              false,
 		WithdrawReceiverAddress: &args.ReceiverAddress,
-	}, &positionIndexId)
+	}, &maxPositionIndexIdPtr)
 	if err != nil {
 		p.logger.Error("error updating position: %v", err)
 		return inserts, updates, err
@@ -204,6 +244,50 @@ func (p *PositionTransformer) ComputeWithdraw(args ProcessPosition, senderPositi
 	}
 	if insert != nil {
 		inserts = append(inserts, *insert)
+	}
+
+	return inserts, updates, nil
+}
+
+func (p *PositionTransformer) ComputeDeposit(args ProcessPosition, existingPosition *database.PublicPositionsSelect, maxPositionIndexId int64) ([]database.PositionInsert, []database.PositionUpdate, error) {
+	var updates []database.PositionUpdate
+	var inserts []database.PositionInsert
+	maxPositionIndexIdPtr := maxPositionIndexId
+
+	p.logger.Debug("computing withdraw. args: %v", args)
+
+	if existingPosition == nil {
+		maxPositionIndexIdPtr++
+		inserts = append(inserts, database.ToPositionInsert(database.PublicPositionsInsert{
+			PositionIndexId:     maxPositionIndexIdPtr,
+			OwnerAddress:        args.SenderAddress,
+			ContractAddress:     args.ContractAddress,
+			AmountShares:        args.AmountShares,
+			PositionStartHeight: int64(args.BlockNumber),
+		}))
+
+	} else {
+		// update sender position
+		insert, update, err := p.UpdatePosition(UpdatePositionInput{
+			CurrentPosition: existingPosition,
+			Address:         args.SenderAddress,
+			AmountShares:    args.AmountShares,
+			BlockNumber:     args.BlockNumber,
+			IsAddition:      true,
+		}, &maxPositionIndexIdPtr)
+
+		if err != nil {
+			p.logger.Error("error updating position: %v", err)
+			return inserts, updates, err
+		}
+		if update != nil {
+			updates = append(updates, *update)
+		}
+		if insert != nil {
+
+			inserts = append(inserts, *insert)
+		}
+
 	}
 
 	return inserts, updates, nil
@@ -221,7 +305,7 @@ type UpdatePositionInput struct {
 
 func (p *PositionTransformer) UpdatePosition(
 	input UpdatePositionInput,
-	positionIndexId *int64,
+	maxPositionIndexId *int64,
 ) (*database.PositionInsert, *database.PositionUpdate, error) {
 
 	if input.CurrentPosition == nil {
@@ -248,14 +332,14 @@ func (p *PositionTransformer) UpdatePosition(
 
 	if !isTerminated {
 		p.logger.Debug("is not terminated. inserting position")
-		*positionIndexId++
+		*maxPositionIndexId++
 
 		newInsert := database.ToPositionInsert(database.PublicPositionsInsert{
 			OwnerAddress:        input.Address,
 			ContractAddress:     input.CurrentPosition.ContractAddress,
 			AmountShares:        newAmountShares,
 			PositionStartHeight: int64(input.BlockNumber),
-			PositionIndexId:     *positionIndexId,
+			PositionIndexId:     *maxPositionIndexId,
 		})
 		insert = &newInsert
 	}

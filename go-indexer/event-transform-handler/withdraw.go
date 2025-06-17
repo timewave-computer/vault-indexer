@@ -75,13 +75,13 @@ func (h *WithdrawHandler) Handle(event database.PublicEventsSelect, eventData da
 	}
 
 	// Process position transformation
-	inserts, updates, err := h.positionTransformer.Transform(transformer.ProcessPosition{
+	inserts, updates, err := h.positionTransformer.Withdraw(transformer.ProcessPosition{
 		ReceiverAddress: withdrawData.Receiver,
 		SenderAddress:   withdrawData.Owner,
 		ContractAddress: event.ContractAddress,
 		AmountShares:    withdrawData.Amount,
 		BlockNumber:     uint64(event.BlockNumber),
-	}, true)
+	})
 
 	if err != nil {
 		return operations, err

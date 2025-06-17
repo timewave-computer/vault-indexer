@@ -59,13 +59,13 @@ func (h *TransferHandler) Handle(event database.PublicEventsSelect, eventData da
 		return operations, err
 	}
 
-	inserts, updates, err := h.positionTransformer.Transform(transformer.ProcessPosition{
+	inserts, updates, err := h.positionTransformer.Transfer(transformer.ProcessPosition{
 		ReceiverAddress: transferData.To,
 		SenderAddress:   transferData.From,
 		ContractAddress: event.ContractAddress,
 		AmountShares:    transferData.Amount,
 		BlockNumber:     uint64(event.BlockNumber),
-	}, false)
+	})
 
 	if err != nil {
 		return operations, err
