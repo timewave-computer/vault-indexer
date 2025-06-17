@@ -39,16 +39,14 @@ func TestProcessDeposit(t *testing.T) {
 	t.Run("deposit, no existing position", func(t *testing.T) {
 
 		var args = ProcessPosition{
-			ReceiverAddress: UserAddress1,
-			SenderAddress:   ZeroAddress,
+			SenderAddress:   UserAddress1,
 			ContractAddress: VaultAddress,
 			AmountShares:    "50",
 			BlockNumber:     1000,
 		}
 
 		var senderPosition *database.PublicPositionsSelect = nil
-		var receiverPosition *database.PublicPositionsSelect = nil
-		gotInserts, gotUpdates, err := processor.ComputeTransfer(args, senderPosition, receiverPosition, maxPositionIndexId)
+		gotInserts, gotUpdates, err := processor.ComputeDeposit(args, senderPosition, maxPositionIndexId)
 
 		var expectedInserts = []database.PositionInsert{
 			{
@@ -70,7 +68,7 @@ func TestProcessDeposit(t *testing.T) {
 
 	t.Run("deposit, existing position", func(t *testing.T) {
 
-		var receiverPosition = database.PublicPositionsSelect{
+		var senderPosition = database.PublicPositionsSelect{
 			Id:                      PositionId1,
 			PositionIndexId:         0,
 			AmountShares:            "100",
@@ -82,18 +80,17 @@ func TestProcessDeposit(t *testing.T) {
 			ContractAddress:         VaultAddress,
 		}
 		var args = ProcessPosition{
-			ReceiverAddress: UserAddress1,
-			SenderAddress:   ZeroAddress,
+			SenderAddress:   UserAddress1,
 			ContractAddress: VaultAddress,
 			AmountShares:    "50",
 			BlockNumber:     2000,
 		}
 
-		gotInserts, gotUpdates, err := processor.ComputeTransfer(args, nil, &receiverPosition, maxPositionIndexId)
+		gotInserts, gotUpdates, err := processor.ComputeDeposit(args, &senderPosition, maxPositionIndexId)
 
 		var expectedUpdates = []database.PositionUpdate{
 			{
-				Id:                      receiverPosition.Id,
+				Id:                      senderPosition.Id,
 				PositionEndHeight:       1999,
 				IsTerminated:            false,
 				WithdrawReceiverAddress: nil,
@@ -318,7 +315,7 @@ func TestProcessWithdraw(t *testing.T) {
 			AmountShares:    "50",
 			BlockNumber:     2000,
 		}
-		gotInserts, gotUpdates, err := processor.ComputeWithdraw(args, &currentPosition, nil, maxPositionIndexId)
+		gotInserts, gotUpdates, err := processor.ComputeWithdraw(args, &currentPosition, maxPositionIndexId)
 
 		var expectedUpdates = []database.PositionUpdate{
 			{
@@ -360,7 +357,7 @@ func TestProcessWithdraw(t *testing.T) {
 			AmountShares:    "100",
 			BlockNumber:     2000,
 		}
-		gotInserts, gotUpdates, err := processor.ComputeWithdraw(args, &senderPosition, nil, maxPositionIndexId)
+		gotInserts, gotUpdates, err := processor.ComputeWithdraw(args, &senderPosition, maxPositionIndexId)
 
 		var expectedInserts = []database.PositionInsert(nil)
 		var expectedUpdates = []database.PositionUpdate{
@@ -385,7 +382,7 @@ func TestProcessWithdraw(t *testing.T) {
 			AmountShares:    "100",
 			BlockNumber:     2000,
 		}
-		gotInserts, gotUpdates, err := processor.ComputeWithdraw(args, nil, nil, maxPositionIndexId)
+		gotInserts, gotUpdates, err := processor.ComputeWithdraw(args, nil, maxPositionIndexId)
 		assert.NoError(t, err)
 		assert.Equal(t, []database.PositionInsert(nil), gotInserts)
 		assert.Equal(t, []database.PositionUpdate(nil), gotUpdates)
