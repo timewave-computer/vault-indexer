@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -36,17 +37,19 @@ type Indexer struct {
 	healthServer   *health.Server
 }
 
-func New(cfg *config.Config) (*Indexer, error) {
+func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	fmt.Println("Created context")
+	indexerLogger := logger.NewLogger("Indexer")
+
+	indexerLogger.Info("Starting indexer...")
 
 	ethClient, err := ethclient.Dial(cfg.Ethereum.WebsocketURL)
-	fmt.Println("Dialed to Ethereum websocket")
+	indexerLogger.Info("Dialed to Ethereum websocket")
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-	fmt.Println("Connected to Ethereum websocket")
+	indexerLogger.Info("Connected to Ethereum websocket")
 
 	// Connect to Supabase
 	supabaseClient, err := supa.NewClient(cfg.Database.SupabaseURL, cfg.Database.SupabaseKey, &supa.ClientOptions{})
@@ -54,7 +57,7 @@ func New(cfg *config.Config) (*Indexer, error) {
 		cancel()
 		return nil, fmt.Errorf("failed to connect to Supabase: %w", err)
 	}
-	fmt.Println("Connected to supabase client")
+	indexerLogger.Info("Connected to supabase client")
 
 	// Create processors
 	eventProcessor := NewEventProcessor(supabaseClient, ethClient)
@@ -64,7 +67,7 @@ func New(cfg *config.Config) (*Indexer, error) {
 		cancel()
 		return nil, fmt.Errorf("failed to connect to Postgres: %w", err)
 	}
-	fmt.Println("Connected to pgdb")
+	indexerLogger.Info("Connected to pgdb")
 
 	transformer, err := NewTransformer(supabaseClient, postgresClient, ethClient)
 	if err != nil {
@@ -84,7 +87,7 @@ func New(cfg *config.Config) (*Indexer, error) {
 		cancel:         cancel,
 		eventProcessor: eventProcessor,
 		transformer:    transformer,
-		logger:         logger.NewLogger("Indexer"),
+		logger:         indexerLogger,
 		healthServer:   healthServer,
 	}, nil
 }
@@ -127,6 +130,15 @@ func (i *Indexer) Start() error {
 			return fmt.Errorf("failed to set up event subscriptions for contract %s: %w", contract.Name, err)
 		}
 	}
+
+	go func() {
+		for {
+			time.Sleep(30 * time.Second)
+			i.logger.Info("Artificially closing ethClient connection for testing...")
+			i.ethClient.Close()
+		}
+
+	}()
 
 	// Start transformer after historical ingestion
 	if err := i.transformer.Start(); err != nil {
@@ -202,55 +214,41 @@ func (i *Indexer) loadHistoricalEvents(contract config.ContractConfig) error {
 	return nil
 }
 
-// setupEventSubscriptions sets up subscriptions for new events
 func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error {
-
-	// Load ABI
+	// Load ABI (same as before)
 	abiPath := filepath.Join("abis", contract.ABIPath)
 	abiBytes, err := os.ReadFile(abiPath)
 	if err != nil {
 		return fmt.Errorf("failed to read ABI file: %w", err)
 	}
-
 	parsedABI, err := abi.JSON(strings.NewReader(string(abiBytes)))
 	if err != nil {
 		return fmt.Errorf("failed to parse ABI: %w", err)
 	}
-
 	contractAddress := common.HexToAddress(contract.Address)
 
-	// Set up event subscription for new events
 	for _, eventName := range contract.Events {
 		event := parsedABI.Events[eventName]
-		query := ethereum.FilterQuery{
-			Addresses: []common.Address{contractAddress},
-			Topics:    [][]common.Hash{{event.ID}},
-		}
-
-		logs := make(chan types.Log)
-		sub, err := i.ethClient.SubscribeFilterLogs(i.ctx, query, logs)
-		if err != nil {
-			return fmt.Errorf("failed to subscribe to logs: %w", err)
-		}
 
 		i.wg.Add(1)
-		go func() {
-			defer i.wg.Done() // decrements waitgroup after goroutine finishes
+		go func(event abi.Event) {
+			defer i.wg.Done()
 			for {
-				select {
-				case err := <-sub.Err():
-					i.logger.Error("Subscription error: %v", err)
-					return
-				case vLog := <-logs:
-					if err := i.eventProcessor.processEvent(vLog, event); err != nil {
-						i.logger.Error("Error processing event: %v", err)
-					}
-				case <-i.ctx.Done():
-					sub.Unsubscribe()
+				err := i.subscribeToEvent(contractAddress, event)
+				i.logger.Error("Subscription error: %v", err)
+
+				// Try reconnecting to eth client
+				if reconnectErr := i.reconnectEthClient(); reconnectErr != nil {
+					i.logger.Error("Could not reconnect. Stopping indexer.")
+					i.cancel()
 					return
 				}
+
+				time.Sleep(2 * time.Second) // Brief pause before retrying subscription
+				continue
+
 			}
-		}()
+		}(event)
 	}
 
 	return nil
@@ -278,4 +276,54 @@ func (i *Indexer) Stop() error {
 	i.postgresClient.Close()
 
 	return nil
+}
+
+func (i *Indexer) reconnectEthClient() error {
+	i.logger.Info("Reconnecting to Ethereum websocket...")
+
+	var err error
+	for attempt := 1; attempt <= 5; attempt++ {
+		i.ethClient.Close() // Close old connection
+
+		i.ethClient, err = ethclient.Dial(i.config.Ethereum.WebsocketURL)
+		if err == nil {
+			i.logger.Info("Reconnected to Ethereum websocket successfully.")
+			return nil
+		}
+
+		i.logger.Error("Reconnect attempt %d failed: %v", attempt, err)
+		time.Sleep(time.Duration(attempt) * time.Second) // Exponential backoff
+	}
+
+	return fmt.Errorf("failed to reconnect after several attempts: %w", err)
+}
+
+func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Event) error {
+	query := ethereum.FilterQuery{
+		Addresses: []common.Address{contractAddress},
+		Topics:    [][]common.Hash{{event.ID}},
+	}
+
+	logs := make(chan types.Log)
+	sub, err := i.ethClient.SubscribeFilterLogs(i.ctx, query, logs)
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to logs: %w", err)
+	}
+
+	for {
+		select {
+		case err := <-sub.Err():
+			i.logger.Error("Subscription error: %v", err)
+			sub.Unsubscribe()
+			return err // Bubble up the error so outer loop can reconnect
+
+		case vLog := <-logs:
+			if err := i.eventProcessor.processEvent(vLog, event); err != nil {
+				i.logger.Error("Error processing event: %v", err)
+			}
+		case <-i.ctx.Done():
+			sub.Unsubscribe()
+			return nil
+		}
+	}
 }
