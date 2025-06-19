@@ -38,7 +38,7 @@ type Indexer struct {
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	indexerLogger := logger.NewLogger("Indexer")
 
 	indexerLogger.Info("Starting indexer...")
