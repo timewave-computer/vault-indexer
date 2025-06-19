@@ -272,7 +272,9 @@ func (i *Indexer) reconnectEthClient() error {
 
 	var err error
 	for attempt := 1; attempt <= 5; attempt++ {
-		i.ethClient.Close() // Close old connection
+		if i.ethClient != nil {
+			i.ethClient.Close() // Close old connection
+		}
 
 		i.ethClient, err = ethclient.Dial(i.config.Ethereum.WebsocketURL)
 		if err == nil {
