@@ -116,6 +116,14 @@ func (i *Indexer) Start() error {
 
 	// Process historical events for each contract
 	for _, contract := range i.config.Contracts {
+		// Check if context is cancelled before processing each contract
+		select {
+		case <-i.ctx.Done():
+			i.logger.Info("Context cancelled during historical event processing")
+			return nil
+		default:
+		}
+
 		// will read historical events from the database and record them
 		if err := i.loadHistoricalEvents(contract); err != nil {
 			return fmt.Errorf("failed to process historical events for contract %s: %w", contract.Name, err)
@@ -125,6 +133,14 @@ func (i *Indexer) Start() error {
 	i.logger.Info("Listening to event subscriptions for %d contracts...", len(i.config.Contracts))
 	// set up event subscriptions for all contracts
 	for _, contract := range i.config.Contracts {
+		// Check if context is cancelled before setting up each subscription
+		select {
+		case <-i.ctx.Done():
+			i.logger.Info("Context cancelled during subscription setup")
+			return nil
+		default:
+		}
+
 		if err := i.setupEventSubscriptions(contract); err != nil {
 			// will subscribe to events for all contracts and begin recording them
 			return fmt.Errorf("failed to set up event subscriptions for contract %s: %w", contract.Name, err)
@@ -140,6 +156,10 @@ func (i *Indexer) Start() error {
 		<-i.transformer.ctx.Done()
 		i.transformer.Stop()
 	}()
+
+	// Wait for context cancellation
+	<-i.ctx.Done()
+	i.logger.Info("Context cancelled, shutting down indexer...")
 
 	return nil
 }
@@ -176,6 +196,13 @@ func (i *Indexer) loadHistoricalEvents(contract config.ContractConfig) error {
 
 	// Create filter query for each event
 	for _, eventName := range contract.Events {
+		// Check if context is cancelled before processing each event
+		select {
+		case <-i.ctx.Done():
+			return fmt.Errorf("context cancelled during historical event processing")
+		default:
+		}
+
 		event, exists := parsedABI.Events[eventName]
 		if !exists {
 			return fmt.Errorf("event %s not found in ABI", eventName)
@@ -195,6 +222,13 @@ func (i *Indexer) loadHistoricalEvents(contract config.ContractConfig) error {
 
 		// Process each log
 		for _, vLog := range logs {
+			// Check if context is cancelled before processing each log
+			select {
+			case <-i.ctx.Done():
+				return fmt.Errorf("context cancelled during log processing")
+			default:
+			}
+
 			if err := i.eventProcessor.processEvent(vLog, event); err != nil {
 				return fmt.Errorf("failed to process event: %w", err)
 			}
@@ -223,7 +257,23 @@ func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error 
 		go func(event abi.Event) {
 			defer i.wg.Done()
 			for {
+				// Check if context is cancelled before attempting subscription
+				select {
+				case <-i.ctx.Done():
+					i.logger.Info("Context cancelled, stopping event subscription")
+					return
+				default:
+					// Continue with subscription
+				}
+
 				err := i.subscribeToEvent(contractAddress, event)
+
+				// If context was cancelled, don't retry
+				if i.ctx.Err() != nil {
+					i.logger.Info("Context cancelled, stopping event subscription")
+					return
+				}
+
 				i.logger.Error("Subscription error: %v", err)
 
 				// Try reconnecting to eth client
@@ -233,9 +283,14 @@ func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error 
 					return
 				}
 
-				time.Sleep(2 * time.Second) // Brief pause before retrying subscription
-				continue
-
+				// Check context again before sleeping
+				select {
+				case <-i.ctx.Done():
+					i.logger.Info("Context cancelled, stopping event subscription")
+					return
+				case <-time.After(2 * time.Second):
+					// Continue to next iteration
+				}
 			}
 		}(event)
 	}
@@ -272,6 +327,13 @@ func (i *Indexer) reconnectEthClient() error {
 
 	var err error
 	for attempt := 1; attempt <= 5; attempt++ {
+		// Check if context is cancelled before attempting reconnection
+		select {
+		case <-i.ctx.Done():
+			return fmt.Errorf("context cancelled during reconnection")
+		default:
+		}
+
 		if i.ethClient != nil {
 			i.ethClient.Close() // Close old connection
 		}
@@ -283,7 +345,14 @@ func (i *Indexer) reconnectEthClient() error {
 		}
 
 		i.logger.Error("Reconnect attempt %d failed: %v", attempt, err)
-		time.Sleep(time.Duration(attempt) * time.Second) // Exponential backoff
+
+		// Check context before sleeping
+		select {
+		case <-i.ctx.Done():
+			return fmt.Errorf("context cancelled during reconnection")
+		case <-time.After(time.Duration(attempt) * time.Second):
+			// Continue to next attempt
+		}
 	}
 
 	return fmt.Errorf("failed to reconnect after several attempts: %w", err)
