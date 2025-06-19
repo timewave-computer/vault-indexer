@@ -131,15 +131,6 @@ func (i *Indexer) Start() error {
 		}
 	}
 
-	go func() {
-		for {
-			time.Sleep(30 * time.Second)
-			i.logger.Info("Artificially closing ethClient connection for testing...")
-			i.ethClient.Close()
-		}
-
-	}()
-
 	// Start transformer after historical ingestion
 	if err := i.transformer.Start(); err != nil {
 		return fmt.Errorf("failed to start transformer: %w", err)
@@ -155,7 +146,6 @@ func (i *Indexer) Start() error {
 
 // processHistoricalEvents processes all historical events for a contract
 func (i *Indexer) loadHistoricalEvents(contract config.ContractConfig) error {
-	// Load ABI
 	abiPath := filepath.Join("abis", contract.ABIPath)
 	abiBytes, err := os.ReadFile(abiPath)
 	if err != nil {
@@ -215,7 +205,6 @@ func (i *Indexer) loadHistoricalEvents(contract config.ContractConfig) error {
 }
 
 func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error {
-	// Load ABI (same as before)
 	abiPath := filepath.Join("abis", contract.ABIPath)
 	abiBytes, err := os.ReadFile(abiPath)
 	if err != nil {
