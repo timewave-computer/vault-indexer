@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/supabase-community/postgrest-go"
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/database"
@@ -21,10 +22,15 @@ var (
 var ZERO_ADDRESS = common.HexToAddress("0x0000000000000000000000000000000000000000")
 
 type PositionTransformer struct {
-	db     *supa.Client
-	ctx    context.Context
-	cancel context.CancelFunc
-	logger *logger.Logger
+	db        *supa.Client
+	ctx       context.Context
+	cancel    context.CancelFunc
+	logger    *logger.Logger
+	ethClient *ethclient.Client
+}
+
+func (p *PositionTransformer) SetEthClient(ethClient *ethclient.Client) {
+	p.ethClient = ethClient
 }
 
 func NewPositionTransformer(db *supa.Client) *PositionTransformer {
@@ -46,6 +52,14 @@ type ProcessPosition struct {
 }
 
 func (p *PositionTransformer) Transfer(args ProcessPosition) ([]database.PositionInsert, []database.PositionUpdate, error) {
+
+	blockHeader, testerr := p.ethClient.HeaderByNumber(p.ctx, big.NewInt(int64(args.BlockNumber)))
+	p.logger.Info("blockHeader: %v", blockHeader)
+
+	if testerr != nil {
+		p.logger.Error("error getting block header: %v", testerr)
+		return nil, nil, testerr
+	}
 
 	// mint, handled by Deposit event
 	if args.SenderAddress == ZERO_ADDRESS.Hex() {
