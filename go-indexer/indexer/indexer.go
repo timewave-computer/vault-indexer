@@ -147,6 +147,14 @@ func (i *Indexer) Start() error {
 		}
 	}
 
+	// go func() {
+	// 	for {
+	// 		fmt.Println("manually closing eth client")
+	// 		time.Sleep(30 * time.Second)
+	// 		i.ethClient.Close()
+	// 	}
+	// }()
+
 	// Start transformer after historical ingestion
 	if err := i.transformer.Start(); err != nil {
 		return fmt.Errorf("failed to start transformer: %w", err)
@@ -341,6 +349,7 @@ func (i *Indexer) reconnectEthClient() error {
 		i.ethClient, err = ethclient.Dial(i.config.Ethereum.WebsocketURL)
 		if err == nil {
 			i.logger.Info("Reconnected to Ethereum websocket successfully.")
+			i.transformer.SetEthClient(i.ethClient)
 			return nil
 		}
 
