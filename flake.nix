@@ -69,8 +69,14 @@
                 supabase db push --db-url "$INDEXER_POSTGRES_CONNECTION_STRING"
                 cd -
               '';
+              unitConfig = {
+                StartLimitBurst = 5;
+                StartLimitIntervalSec = "10m";
+              };
               serviceConfig = {
                 ExecStart = "${lib.getExe package} prod";
+                Restart = "on-failure";
+                RestartSec = "1s";
                 StateDirectory = "vault-indexer";
                 WorkingDirectory = "/var/lib/vault-indexer";
               };
