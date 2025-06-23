@@ -4,16 +4,16 @@ import (
 	"fmt"
 
 	"github.com/timewave/vault-indexer/go-indexer/database"
-	"github.com/timewave/vault-indexer/go-indexer/transformer"
+	transformers "github.com/timewave/vault-indexer/go-indexer/transformers"
 )
 
 // WithdrawHandler handles WithdrawRequested events
 type DepositHandler struct {
-	positionTransformer *transformer.PositionTransformer
+	positionTransformer *transformers.PositionTransformer
 }
 
 // NewWithdrawHandler creates a new withdraw handler
-func NewDepositHandler(positionTransformer *transformer.PositionTransformer) *DepositHandler {
+func NewDepositHandler(positionTransformer *transformers.PositionTransformer) *DepositHandler {
 	return &DepositHandler{
 		positionTransformer: positionTransformer,
 	}
@@ -60,7 +60,7 @@ func (h *DepositHandler) Handle(event database.PublicEventsSelect, eventData dat
 	}
 
 	// Process position transformation
-	inserts, updates, err := h.positionTransformer.Deposit(transformer.ProcessPosition{
+	inserts, updates, err := h.positionTransformer.Deposit(transformers.ProcessPosition{
 		SenderAddress:   depositData.Sender,
 		ContractAddress: event.ContractAddress,
 		AmountShares:    depositData.AmountShares,

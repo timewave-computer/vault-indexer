@@ -16,7 +16,7 @@ import (
 	transformHandler "github.com/timewave/vault-indexer/go-indexer/event-transform-handler"
 	"github.com/timewave/vault-indexer/go-indexer/health"
 	"github.com/timewave/vault-indexer/go-indexer/logger"
-	transformer "github.com/timewave/vault-indexer/go-indexer/transformer"
+	transformers "github.com/timewave/vault-indexer/go-indexer/transformers"
 )
 
 // Transformer handles processing of raw events into derived data
@@ -36,8 +36,8 @@ type Transformer struct {
 	lastError     error
 	lastErrorTime *time.Time
 
-	rateUpdateTransformer *transformer.RateUpdateTransformer
-	positionTransformer   *transformer.PositionTransformer
+	rateUpdateTransformer *transformers.RateUpdateTransformer
+	positionTransformer   *transformers.PositionTransformer
 }
 
 // NewTransformer creates a new transformer instance
@@ -55,9 +55,9 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client
 	}
 
 	// initialize transformers
-	positionTransformer := transformer.NewPositionTransformer(supa)
-	withdrawRequestTransformer := transformer.NewWithdrawRequestTransformer(supa)
-	rateUpdateTransformer := transformer.NewRateUpdateTransformer(supa, ethClient)
+	positionTransformer := transformers.NewPositionTransformer(supa)
+	withdrawRequestTransformer := transformers.NewWithdrawRequestTransformer(supa)
+	rateUpdateTransformer := transformers.NewRateUpdateTransformer(supa, ethClient)
 
 	// initialize event transformer handlers
 	depositHandler := transformHandler.NewDepositHandler(positionTransformer)

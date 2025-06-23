@@ -5,17 +5,17 @@ import (
 	"strconv"
 
 	"github.com/timewave/vault-indexer/go-indexer/database"
-	"github.com/timewave/vault-indexer/go-indexer/transformer"
+	transformers "github.com/timewave/vault-indexer/go-indexer/transformers"
 )
 
 // WithdrawHandler handles WithdrawRequested events
 type WithdrawHandler struct {
-	positionTransformer        *transformer.PositionTransformer
-	withdrawRequestTransformer *transformer.WithdrawRequestTransformer
+	positionTransformer        *transformers.PositionTransformer
+	withdrawRequestTransformer *transformers.WithdrawRequestTransformer
 }
 
 // NewWithdrawHandler creates a new withdraw handler
-func NewWithdrawHandler(positionTransformer *transformer.PositionTransformer, withdrawRequestTransformer *transformer.WithdrawRequestTransformer) *WithdrawHandler {
+func NewWithdrawHandler(positionTransformer *transformers.PositionTransformer, withdrawRequestTransformer *transformers.WithdrawRequestTransformer) *WithdrawHandler {
 	return &WithdrawHandler{
 		positionTransformer:        positionTransformer,
 		withdrawRequestTransformer: withdrawRequestTransformer,
@@ -75,7 +75,7 @@ func (h *WithdrawHandler) Handle(event database.PublicEventsSelect, eventData da
 	}
 
 	// Process position transformation
-	inserts, updates, err := h.positionTransformer.Withdraw(transformer.ProcessPosition{
+	inserts, updates, err := h.positionTransformer.Withdraw(transformers.ProcessPosition{
 		ReceiverAddress: withdrawData.Receiver,
 		SenderAddress:   withdrawData.Owner,
 		ContractAddress: event.ContractAddress,
@@ -102,7 +102,7 @@ func (h *WithdrawHandler) Handle(event database.PublicEventsSelect, eventData da
 	}
 
 	// Process withdraw request transformation
-	withdrawRequest, err := h.withdrawRequestTransformer.Transform(transformer.ProcessWithdrawRequest{
+	withdrawRequest, err := h.withdrawRequestTransformer.Transform(transformers.ProcessWithdrawRequest{
 		OwnerAddress:    withdrawData.Owner,
 		ReceiverAddress: withdrawData.Receiver,
 		Amount:          withdrawData.Amount,

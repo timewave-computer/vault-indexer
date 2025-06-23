@@ -30,11 +30,12 @@ type Indexer struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
 	postgresClient *sql.DB
-	eventProcessor *EventProcessor
+	extractor      *Extractor
 	transformer    *Transformer
 	wg             sync.WaitGroup
 	logger         *logger.Logger
 	healthServer   *health.Server
+	errors         chan error
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
@@ -51,7 +52,6 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	}
 	indexerLogger.Info("Connected to Ethereum websocket")
 
-	// Connect to Supabase
 	supabaseClient, err := supa.NewClient(cfg.Database.SupabaseURL, cfg.Database.SupabaseKey, &supa.ClientOptions{})
 	if err != nil {
 		cancel()
@@ -59,8 +59,7 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	}
 	indexerLogger.Info("Connected to supabase client")
 
-	// Create processors
-	eventProcessor := NewEventProcessor(supabaseClient, ethClient)
+	extractor := NewExtractor(supabaseClient, ethClient)
 
 	postgresClient, err := sql.Open("postgres", cfg.Database.PostgresConnectionString)
 	if err != nil {
@@ -78,6 +77,8 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	// Create health check server
 	healthServer := health.NewServer(8080, "event_ingestion") // Default port for indexer health checks
 
+	errors := make(chan error, len(cfg.Contracts)*10)
+
 	return &Indexer{
 		config:         cfg,
 		postgresClient: postgresClient,
@@ -85,77 +86,56 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 		supabaseClient: supabaseClient,
 		ctx:            ctx,
 		cancel:         cancel,
-		eventProcessor: eventProcessor,
+		extractor:      extractor,
 		transformer:    transformer,
 		logger:         indexerLogger,
 		healthServer:   healthServer,
+		errors:         errors,
 	}, nil
 }
 
 func (i *Indexer) Start() error {
 	i.logger.Info("Starting indexer...")
 
-	// Start health check server
 	if err := i.healthServer.Start(); err != nil {
 		return fmt.Errorf("failed to start health check server: %w", err)
 	}
 
-	// Perform health check by getting current block height
-	blockNumber, err := i.ethClient.BlockNumber(i.ctx)
+	currentBlock, err := i.ethClient.BlockNumber(i.ctx)
 	if err != nil {
-		i.healthServer.SetStatus("unhealthy")
-
-		_ = i.healthServer.Stop() // best-effort cleanup
-		return fmt.Errorf("health check failed: %w", err)
-
+		i.Stop()
+		return fmt.Errorf("failed to get current block height: %w", err)
 	}
-	i.healthServer.SetStatus("healthy")
-	i.logger.Info("Health check successful - Current block height: %d", blockNumber)
+	i.logger.Info("Current block height: %d", currentBlock)
 
-	i.logger.Info("Processing historical events for %d contracts...", len(i.config.Contracts))
-
-	// Process historical events for each contract
-	for _, contract := range i.config.Contracts {
-		// Check if context is cancelled before processing each contract
+	// Listen for errors from go routines
+	go func() {
 		select {
+		case err := <-i.errors:
+			i.logger.Error("Error: %v", err)
+			i.Stop()
 		case <-i.ctx.Done():
-			i.logger.Info("Context cancelled during historical event processing")
-			return nil
-		default:
+			// context cancelled, stop listening for errors
+			return
 		}
+	}()
 
-		// will read historical events from the database and record them
-		if err := i.loadHistoricalEvents(contract); err != nil {
-			return fmt.Errorf("failed to process historical events for contract %s: %w", contract.Name, err)
-		}
-	}
+	/*
+		1. Start subscription and writing events immediately
+	*/
+	i.logger.Info("Creating subscriptions for %d contracts...", len(i.config.Contracts))
+	i.setupSubscriptions()
 
-	i.logger.Info("Listening to event subscriptions for %d contracts...", len(i.config.Contracts))
-	// set up event subscriptions for all contracts
-	for _, contract := range i.config.Contracts {
-		// Check if context is cancelled before setting up each subscription
-		select {
-		case <-i.ctx.Done():
-			i.logger.Info("Context cancelled during subscription setup")
-			return nil
-		default:
-		}
+	/*
+		2. Backfill with idempotency [lastProcessedBlock,currentBlock]
+	*/
 
-		if err := i.setupEventSubscriptions(contract); err != nil {
-			// will subscribe to events for all contracts and begin recording them
-			return fmt.Errorf("failed to set up event subscriptions for contract %s: %w", contract.Name, err)
-		}
-	}
+	i.backfillEvents(currentBlock)
 
-	// go func() {
-	// 	for {
-	// 		fmt.Println("manually closing eth client")
-	// 		time.Sleep(30 * time.Second)
-	// 		i.ethClient.Close()
-	// 	}
-	// }()
+	/*
+		3. Start transformer
+	*/
 
-	// Start transformer after historical ingestion
 	if err := i.transformer.Start(); err != nil {
 		return fmt.Errorf("failed to start transformer: %w", err)
 	}
@@ -172,199 +152,128 @@ func (i *Indexer) Start() error {
 	return nil
 }
 
-// processHistoricalEvents processes all historical events for a contract
-func (i *Indexer) loadHistoricalEvents(contract config.ContractConfig) error {
-	abiPath := filepath.Join("abis", contract.ABIPath)
-	abiBytes, err := os.ReadFile(abiPath)
-	if err != nil {
-		return fmt.Errorf("failed to read ABI file: %w", err)
-	}
-
-	parsedABI, err := abi.JSON(strings.NewReader(string(abiBytes)))
-	if err != nil {
-		return fmt.Errorf("failed to parse ABI: %w", err)
-	}
-
-	contractAddress := common.HexToAddress(contract.Address)
-
-	// Get current block number
-	currentBlock, err := i.ethClient.BlockNumber(i.ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get current block: %w", err)
-	}
-
-	// Process historical events
-	fromBlock := big.NewInt(int64(contract.StartBlock))
-	var toBlock *big.Int
-	if contract.EndBlock == 0 {
-		toBlock = big.NewInt(int64(currentBlock))
-	} else {
-		toBlock = big.NewInt(int64(contract.EndBlock))
-	}
-
-	// Create filter query for each event
-	for _, eventName := range contract.Events {
-		// Check if context is cancelled before processing each event
-		select {
-		case <-i.ctx.Done():
-			return fmt.Errorf("context cancelled during historical event processing")
-		default:
-		}
-
-		event, exists := parsedABI.Events[eventName]
-		if !exists {
-			return fmt.Errorf("event %s not found in ABI", eventName)
-		}
-
-		query := ethereum.FilterQuery{
-			FromBlock: fromBlock,
-			ToBlock:   toBlock,
-			Addresses: []common.Address{contractAddress},
-			Topics:    [][]common.Hash{{event.ID}},
-		}
-
-		logs, err := i.ethClient.FilterLogs(i.ctx, query)
+func (i *Indexer) backfillEvents(currentBlock uint64) {
+	for _, contract := range i.config.Contracts {
+		parsedABI, err := i.loadAbi(contract)
 		if err != nil {
-			return fmt.Errorf("failed to get logs: %w", err)
+			i.errors <- fmt.Errorf("failed to load ABI for contract %s: %w", contract.Address, err)
+			return
 		}
 
-		// Process each log
-		for _, vLog := range logs {
-			// Check if context is cancelled before processing each log
+		contractAddress := common.HexToAddress(contract.Address)
+
+		// Create filter query for each event
+		for _, eventName := range contract.Events {
+			// Check if context is cancelled before processing each event
 			select {
 			case <-i.ctx.Done():
-				return fmt.Errorf("context cancelled during log processing")
+				i.errors <- fmt.Errorf("context cancelled during historical event processing")
+				return
 			default:
 			}
 
-			if err := i.eventProcessor.processEvent(vLog, event); err != nil {
-				return fmt.Errorf("failed to process event: %w", err)
+			event, exists := parsedABI.Events[eventName]
+			if !exists {
+				i.errors <- fmt.Errorf("event %s not found in ABI", eventName)
+			}
+
+			var toBlock *big.Int
+			if contract.EndBlock == 0 {
+				toBlock = big.NewInt(int64(currentBlock)) // add generous buffer for backfilling
+			} else {
+				toBlock = big.NewInt(int64(contract.EndBlock))
+			}
+			fromBlock := big.NewInt(int64(contract.StartBlock))
+
+			query := ethereum.FilterQuery{
+				FromBlock: fromBlock,
+				ToBlock:   toBlock,
+				Addresses: []common.Address{contractAddress},
+				Topics:    [][]common.Hash{{event.ID}},
+			}
+
+			logs, err := i.ethClient.FilterLogs(i.ctx, query)
+			if err != nil {
+				i.errors <- fmt.Errorf("failed to get logs: %w", err)
+				return
+			}
+
+			// Process each log
+			for _, vLog := range logs {
+				// Check if context is cancelled before processing each log
+				select {
+				case <-i.ctx.Done():
+					i.errors <- fmt.Errorf("context cancelled during log processing")
+					return
+				default:
+				}
+
+				if err := i.extractor.writeEvent(vLog, event); err != nil {
+					i.errors <- fmt.Errorf("failed to process event: %w", err)
+				}
 			}
 		}
 	}
-
-	return nil
 }
 
-func (i *Indexer) setupEventSubscriptions(contract config.ContractConfig) error {
+func (i *Indexer) loadAbi(contract config.ContractConfig) (abi.ABI, error) {
 	abiPath := filepath.Join("abis", contract.ABIPath)
 	abiBytes, err := os.ReadFile(abiPath)
 	if err != nil {
-		return fmt.Errorf("failed to read ABI file: %w", err)
+		return abi.ABI{}, fmt.Errorf("failed to read ABI file: %w", err)
 	}
 	parsedABI, err := abi.JSON(strings.NewReader(string(abiBytes)))
 	if err != nil {
-		return fmt.Errorf("failed to parse ABI: %w", err)
+		return abi.ABI{}, fmt.Errorf("failed to parse ABI: %w", err)
 	}
-	contractAddress := common.HexToAddress(contract.Address)
-
-	for _, eventName := range contract.Events {
-		event := parsedABI.Events[eventName]
-
-		i.wg.Add(1)
-		go func(event abi.Event) {
-			defer i.wg.Done()
-			for {
-				// Check if context is cancelled before attempting subscription
-				select {
-				case <-i.ctx.Done():
-					i.logger.Info("Context cancelled, stopping event subscription")
-					return
-				default:
-					// Continue with subscription
-				}
-
-				err := i.subscribeToEvent(contractAddress, event)
-
-				// If context was cancelled, don't retry
-				if i.ctx.Err() != nil {
-					i.logger.Info("Context cancelled, stopping event subscription")
-					return
-				}
-
-				i.logger.Error("Subscription error: %v", err)
-
-				// Try reconnecting to eth client
-				if reconnectErr := i.reconnectEthClient(); reconnectErr != nil {
-					i.logger.Error("Could not reconnect. Stopping indexer.")
-					i.cancel()
-					return
-				}
-
-				// Check context again before sleeping
-				select {
-				case <-i.ctx.Done():
-					i.logger.Info("Context cancelled, stopping event subscription")
-					return
-				case <-time.After(2 * time.Second):
-					// Continue to next iteration
-				}
-			}
-		}(event)
-	}
-
-	return nil
+	return parsedABI, nil
 }
 
-func (i *Indexer) Stop() error {
-	i.logger.Info("Stopping indexer...")
-
-	// Stop health check server
-	if err := i.healthServer.Stop(); err != nil {
-		i.logger.Error("Error stopping health check server: %v", err)
-	}
-
-	// signal writers to stop
-	i.cancel()
-
-	// wait until all goroutines finish
-	i.wg.Wait()
-
-	i.eventProcessor.Stop()
-	i.transformer.Stop()
-
-	// finally release external resources
-	i.ethClient.Close()
-	i.postgresClient.Close()
-
-	return nil
-}
-
-func (i *Indexer) reconnectEthClient() error {
-	i.logger.Info("Reconnecting to Ethereum websocket...")
-
-	var err error
-	for attempt := 1; attempt <= 5; attempt++ {
-		// Check if context is cancelled before attempting reconnection
-		select {
-		case <-i.ctx.Done():
-			return fmt.Errorf("context cancelled during reconnection")
-		default:
+func (i *Indexer) setupSubscriptions() {
+	for _, contract := range i.config.Contracts {
+		parsedABI, err := i.loadAbi(contract)
+		if err != nil {
+			i.errors <- fmt.Errorf("failed to load ABI for contract %s: %w", contract.Address, err)
+			return
 		}
+		contractAddress := common.HexToAddress(contract.Address)
 
-		if i.ethClient != nil {
-			i.ethClient.Close() // Close old connection
-		}
+		for _, _eventName := range contract.Events {
+			eventName := parsedABI.Events[_eventName]
 
-		i.ethClient, err = ethclient.Dial(i.config.Ethereum.WebsocketURL)
-		if err == nil {
-			i.logger.Info("Reconnected to Ethereum websocket successfully.")
-			i.transformer.SetEthClient(i.ethClient)
-			return nil
-		}
+			i.wg.Add(1)
+			go func(event abi.Event) {
+				defer i.wg.Done()
+				for {
+					// Check if context is cancelled before attempting subscription
+					select {
+					case <-i.ctx.Done():
+						i.errors <- fmt.Errorf("context cancelled during event subscription")
+						return
+					default:
+						// Continue with subscription
+					}
 
-		i.logger.Error("Reconnect attempt %d failed: %v", attempt, err)
+					err := i.subscribeToEvent(contractAddress, event)
 
-		// Check context before sleeping
-		select {
-		case <-i.ctx.Done():
-			return fmt.Errorf("context cancelled during reconnection")
-		case <-time.After(time.Duration(attempt) * time.Second):
-			// Continue to next attempt
+					if err != nil {
+						i.errors <- fmt.Errorf("failed to subscribe to event %s for contract %s: %w", event.Name, contract.Address, err)
+						i.Stop()
+						return
+					}
+
+					// Check context again before sleeping
+					select {
+					case <-i.ctx.Done():
+						i.errors <- fmt.Errorf("context cancelled during event subscription")
+						return
+					case <-time.After(2 * time.Second):
+						// Continue to next iteration
+					}
+				}
+			}(eventName)
 		}
 	}
-
-	return fmt.Errorf("failed to reconnect after several attempts: %w", err)
 }
 
 func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Event) error {
@@ -387,7 +296,7 @@ func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Eve
 			return err // Bubble up the error so outer loop can reconnect
 
 		case vLog := <-logs:
-			if err := i.eventProcessor.processEvent(vLog, event); err != nil {
+			if err := i.extractor.writeEvent(vLog, event); err != nil {
 				i.logger.Error("Error processing event: %v", err)
 			}
 		case <-i.ctx.Done():
@@ -395,4 +304,30 @@ func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Eve
 			return nil
 		}
 	}
+}
+
+func (i *Indexer) Stop() error {
+	i.logger.Info("Stopping indexer...")
+	i.healthServer.SetStatus("unhealthy")
+
+	close(i.errors)
+	// Stop health check server
+	if err := i.healthServer.Stop(); err != nil {
+		i.logger.Error("Error stopping health check server: %v", err)
+	}
+
+	// signal writers to stop
+	i.cancel()
+
+	// wait until all goroutines finish
+	i.wg.Wait()
+
+	i.extractor.Stop()
+	i.transformer.Stop()
+
+	// finally release external resources
+	i.ethClient.Close()
+	i.postgresClient.Close()
+
+	return nil
 }

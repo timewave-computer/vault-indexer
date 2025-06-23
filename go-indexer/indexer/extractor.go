@@ -17,7 +17,7 @@ import (
 )
 
 // EventProcessor handles blockchain event processing and storage
-type EventProcessor struct {
+type Extractor struct {
 	db     *supa.Client
 	client *ethclient.Client
 	ctx    context.Context
@@ -25,10 +25,10 @@ type EventProcessor struct {
 	logger *logger.Logger
 }
 
-// NewEventProcessor creates a new event processor
-func NewEventProcessor(db *supa.Client, client *ethclient.Client) *EventProcessor {
+// NewExtractor creates a new event processor
+func NewExtractor(db *supa.Client, client *ethclient.Client) *Extractor {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &EventProcessor{
+	return &Extractor{
 		db:     db,
 		client: client,
 		ctx:    ctx,
@@ -37,11 +37,11 @@ func NewEventProcessor(db *supa.Client, client *ethclient.Client) *EventProcesso
 	}
 }
 
-func (e *EventProcessor) Stop() {
+func (e *Extractor) Stop() {
 	e.cancel()
 }
 
-func (e *EventProcessor) processEvent(vLog types.Log, event abi.Event) error {
+func (e *Extractor) writeEvent(vLog types.Log, event abi.Event) error {
 	eventData, err := parseEvent(vLog, event)
 	if err != nil {
 		return fmt.Errorf("failed to process event: %w", err)

@@ -50,11 +50,13 @@ func (s *Server) Start() error {
 	if err != nil {
 		return fmt.Errorf("failed to bind to port %d: %w", s.port, err)
 	}
+	s.SetStatus("healthy")
 
 	// Start the server in a goroutine
 	go func() {
 		if err := s.server.Serve(listener); err != nil && err != http.ErrServerClosed {
 			s.logger.Error("Health check server error: %v", err)
+			s.SetStatus("unhealthy")
 		}
 	}()
 	return nil
