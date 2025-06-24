@@ -29,10 +29,6 @@ type PositionTransformer struct {
 	ethClient *ethclient.Client
 }
 
-func (p *PositionTransformer) SetEthClient(ethClient *ethclient.Client) {
-	p.ethClient = ethClient
-}
-
 func NewPositionTransformer(db *supa.Client) *PositionTransformer {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &PositionTransformer{
@@ -52,14 +48,6 @@ type ProcessPosition struct {
 }
 
 func (p *PositionTransformer) Transfer(args ProcessPosition) ([]database.PositionInsert, []database.PositionUpdate, error) {
-
-	blockHeader, testerr := p.ethClient.HeaderByNumber(p.ctx, big.NewInt(int64(args.BlockNumber)))
-	p.logger.Info("blockHeader: %v", blockHeader)
-
-	if testerr != nil {
-		p.logger.Error("error getting block header: %v", testerr)
-		return nil, nil, testerr
-	}
 
 	// mint, handled by Deposit event
 	if args.SenderAddress == ZERO_ADDRESS.Hex() {
@@ -144,18 +132,24 @@ func (p *PositionTransformer) GetMostRecentPosition(address string, contractAddr
 		Eq("contract_address", contractAddress).
 		Order("position_index_id", &postgrest.OrderOpts{Ascending: false}).
 		Limit(1, "").
-		Single().
 		Execute()
 
 	if err != nil {
 		return nil, nil
 	}
 
-	var pos database.PublicPositionsSelect
-	if err := json.Unmarshal(data, &pos); err != nil {
+	var positions []database.PublicPositionsSelect
+	if err := json.Unmarshal(data, &positions); err != nil {
 		p.logger.Error("Error unmarshaling position: %v", err)
 		return nil, err
 	}
+
+	if len(positions) == 0 {
+		// no position found
+		return nil, nil
+	}
+
+	pos := positions[0]
 
 	if pos.IsTerminated != nil && *pos.IsTerminated {
 		return nil, nil

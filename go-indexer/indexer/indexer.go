@@ -3,6 +3,7 @@ package indexer
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"os"
@@ -16,8 +17,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/supabase-community/postgrest-go"
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/config"
+	"github.com/timewave/vault-indexer/go-indexer/database"
 	"github.com/timewave/vault-indexer/go-indexer/health"
 	"github.com/timewave/vault-indexer/go-indexer/logger"
 )
@@ -32,7 +35,7 @@ type Indexer struct {
 	postgresClient *sql.DB
 	extractor      *Extractor
 	transformer    *Transformer
-	wg             sync.WaitGroup
+	subscriptionWG sync.WaitGroup
 	logger         *logger.Logger
 	healthServer   *health.Server
 	errors         chan error
@@ -123,17 +126,21 @@ func (i *Indexer) Start() error {
 	/*
 		1. Start subscription and writing events immediately
 	*/
-	i.logger.Info("Creating subscriptions for %d contracts...", len(i.config.Contracts))
+	i.logger.Info("Setting up subscriptions for %d contracts...", len(i.config.Contracts))
 	i.setupSubscriptions()
+	i.subscriptionWG.Wait()
+	i.logger.Info("Subscriptions created")
 
 	/*
 		2. Backfill with idempotency [lastProcessedBlock,currentBlock]
 	*/
 
+	i.logger.Info("Backfilling events from current block %d...", currentBlock)
 	i.backfillEvents(currentBlock)
+	i.logger.Info("Backfill completed")
 
 	/*
-		3. Start transformer
+		3. Start transformer (process events saved in database)
 	*/
 
 	if err := i.transformer.Start(); err != nil {
@@ -152,88 +159,11 @@ func (i *Indexer) Start() error {
 	return nil
 }
 
-func (i *Indexer) backfillEvents(currentBlock uint64) {
-	for _, contract := range i.config.Contracts {
-		parsedABI, err := i.loadAbi(contract)
-		if err != nil {
-			i.errors <- fmt.Errorf("failed to load ABI for contract %s: %w", contract.Address, err)
-			return
-		}
-
-		contractAddress := common.HexToAddress(contract.Address)
-
-		// Create filter query for each event
-		for _, eventName := range contract.Events {
-			// Check if context is cancelled before processing each event
-			select {
-			case <-i.ctx.Done():
-				i.errors <- fmt.Errorf("context cancelled during historical event processing")
-				return
-			default:
-			}
-
-			event, exists := parsedABI.Events[eventName]
-			if !exists {
-				i.errors <- fmt.Errorf("event %s not found in ABI", eventName)
-			}
-
-			var toBlock *big.Int
-			if contract.EndBlock == 0 {
-				toBlock = big.NewInt(int64(currentBlock)) // add generous buffer for backfilling
-			} else {
-				toBlock = big.NewInt(int64(contract.EndBlock))
-			}
-			fromBlock := big.NewInt(int64(contract.StartBlock))
-
-			query := ethereum.FilterQuery{
-				FromBlock: fromBlock,
-				ToBlock:   toBlock,
-				Addresses: []common.Address{contractAddress},
-				Topics:    [][]common.Hash{{event.ID}},
-			}
-
-			logs, err := i.ethClient.FilterLogs(i.ctx, query)
-			if err != nil {
-				i.errors <- fmt.Errorf("failed to get logs: %w", err)
-				return
-			}
-
-			// Process each log
-			for _, vLog := range logs {
-				// Check if context is cancelled before processing each log
-				select {
-				case <-i.ctx.Done():
-					i.errors <- fmt.Errorf("context cancelled during log processing")
-					return
-				default:
-				}
-
-				if err := i.extractor.writeEvent(vLog, event); err != nil {
-					i.errors <- fmt.Errorf("failed to process event: %w", err)
-				}
-			}
-		}
-	}
-}
-
-func (i *Indexer) loadAbi(contract config.ContractConfig) (abi.ABI, error) {
-	abiPath := filepath.Join("abis", contract.ABIPath)
-	abiBytes, err := os.ReadFile(abiPath)
-	if err != nil {
-		return abi.ABI{}, fmt.Errorf("failed to read ABI file: %w", err)
-	}
-	parsedABI, err := abi.JSON(strings.NewReader(string(abiBytes)))
-	if err != nil {
-		return abi.ABI{}, fmt.Errorf("failed to parse ABI: %w", err)
-	}
-	return parsedABI, nil
-}
-
 func (i *Indexer) setupSubscriptions() {
 	for _, contract := range i.config.Contracts {
 		parsedABI, err := i.loadAbi(contract)
 		if err != nil {
-			i.errors <- fmt.Errorf("failed to load ABI for contract %s: %w", contract.Address, err)
+			i.sendError(fmt.Errorf("failed to load ABI for contract %s: %w", contract.Address, err))
 			return
 		}
 		contractAddress := common.HexToAddress(contract.Address)
@@ -241,14 +171,16 @@ func (i *Indexer) setupSubscriptions() {
 		for _, _eventName := range contract.Events {
 			eventName := parsedABI.Events[_eventName]
 
-			i.wg.Add(1)
+			i.subscriptionWG.Add(1)
 			go func(event abi.Event) {
-				defer i.wg.Done()
+				// Signal that this subscription goroutine has started
+				i.subscriptionWG.Done()
+
 				for {
 					// Check if context is cancelled before attempting subscription
 					select {
 					case <-i.ctx.Done():
-						i.errors <- fmt.Errorf("context cancelled during event subscription")
+						// Don't send error on context cancellation during shutdown
 						return
 					default:
 						// Continue with subscription
@@ -257,7 +189,12 @@ func (i *Indexer) setupSubscriptions() {
 					err := i.subscribeToEvent(contractAddress, event)
 
 					if err != nil {
-						i.errors <- fmt.Errorf("failed to subscribe to event %s for contract %s: %w", event.Name, contract.Address, err)
+						// Use non-blocking send to avoid panic if channel is closed
+						select {
+						case i.errors <- fmt.Errorf("failed to subscribe to event %s for contract %s: %w", event.Name, contract.Address, err):
+						default:
+							// Channel is closed or full, ignore
+						}
 						i.Stop()
 						return
 					}
@@ -265,7 +202,7 @@ func (i *Indexer) setupSubscriptions() {
 					// Check context again before sleeping
 					select {
 					case <-i.ctx.Done():
-						i.errors <- fmt.Errorf("context cancelled during event subscription")
+						// Don't send error on context cancellation during shutdown
 						return
 					case <-time.After(2 * time.Second):
 						// Continue to next iteration
@@ -277,6 +214,8 @@ func (i *Indexer) setupSubscriptions() {
 }
 
 func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Event) error {
+	i.logger.Debug("Subscribing to %s on contract %s", event.Name, contractAddress.String())
+
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 		Topics:    [][]common.Hash{{event.ID}},
@@ -296,7 +235,7 @@ func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Eve
 			return err // Bubble up the error so outer loop can reconnect
 
 		case vLog := <-logs:
-			if err := i.extractor.writeEvent(vLog, event); err != nil {
+			if err := i.extractor.writeIdempotentEvent(vLog, event); err != nil {
 				i.logger.Error("Error processing event: %v", err)
 			}
 		case <-i.ctx.Done():
@@ -306,11 +245,145 @@ func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Eve
 	}
 }
 
+func (i *Indexer) backfillEvents(currentBlock uint64) {
+	for _, contract := range i.config.Contracts {
+
+		parsedABI, err := i.loadAbi(contract)
+		if err != nil {
+			i.sendError(fmt.Errorf("failed to load ABI for contract %s: %w", contract.Address, err))
+			return
+		}
+
+		contractAddress := common.HexToAddress(contract.Address)
+
+		// Create filter query for each event
+		for _, eventName := range contract.Events {
+
+			lastIndexedBlock, err := i.getLastIndexedBlock(contractAddress, eventName)
+			if err != nil {
+				i.sendError(fmt.Errorf("failed to get last processed event for contract %s and event %s: %w", contract.Address, eventName, err))
+				return
+			}
+
+			toBlock := big.NewInt(int64(currentBlock))
+
+			var fromBlock *big.Int
+			if lastIndexedBlock == nil {
+				i.logger.Info("Backfilling from start block %d for %s on %s", contract.StartBlock, eventName, contract.Address)
+				fromBlock = big.NewInt(int64(contract.StartBlock))
+			} else {
+				i.logger.Info("Backfilling from last indexed block %d for %s on %s", *lastIndexedBlock, eventName, contract.Address)
+				fromBlock = big.NewInt(int64(*lastIndexedBlock)) // its ok if there is overlap in the last indexed block, events are idempotent
+			}
+
+			// Check if context is cancelled before processing each event
+			select {
+			case <-i.ctx.Done():
+				// Don't send error on context cancellation during shutdown
+				return
+			default:
+			}
+
+			event, exists := parsedABI.Events[eventName]
+			if !exists {
+				i.sendError(fmt.Errorf("event %s not found in ABI", eventName))
+			}
+
+			query := ethereum.FilterQuery{
+				FromBlock: fromBlock,
+				ToBlock:   toBlock,
+				Addresses: []common.Address{contractAddress},
+				Topics:    [][]common.Hash{{event.ID}},
+			}
+
+			logs, err := i.ethClient.FilterLogs(i.ctx, query)
+			if err != nil {
+				i.sendError(fmt.Errorf("failed to get logs: %w", err))
+				return
+			}
+
+			// Process each log
+			for _, vLog := range logs {
+
+				// Check if context is cancelled before processing each log
+				select {
+				case <-i.ctx.Done():
+					// Don't send error on context cancellation during shutdown
+					return
+				default:
+				}
+
+				if err := i.extractor.writeIdempotentEvent(vLog, event); err != nil {
+					i.sendError(fmt.Errorf("failed to process event: %w", err))
+				}
+				i.logger.Info("Sleeping for 15 seconds during backfill")
+				time.Sleep(15 * time.Second)
+			}
+		}
+	}
+}
+
+func (i *Indexer) getLastIndexedBlock(
+	contractAddress common.Address,
+	eventName string,
+) (*int64, error) {
+
+	data, _, err := i.supabaseClient.From("events").
+		Select("block_number", "", false).
+		Eq("contract_address", contractAddress.String()).
+		Eq("event_name", eventName).
+		Order("block_number", &postgrest.OrderOpts{Ascending: false}).
+		Limit(1, "").
+		Execute()
+
+	if err != nil {
+		return nil, err
+	}
+
+	var indexedEvents []database.PublicEventsSelect
+
+	if err := json.Unmarshal(data, &indexedEvents); err != nil {
+		return nil, err
+	}
+
+	i.logger.Debug("Last indexed block for %s on %s: %v", eventName, contractAddress.String(), indexedEvents)
+
+	if len(indexedEvents) == 0 {
+		return nil, nil
+	}
+
+	lastIndexedEvent := indexedEvents[0]
+
+	return &lastIndexedEvent.BlockNumber, nil
+}
+
+func (i *Indexer) loadAbi(contract config.ContractConfig) (abi.ABI, error) {
+	abiPath := filepath.Join("abis", contract.ABIPath)
+	abiBytes, err := os.ReadFile(abiPath)
+	if err != nil {
+		return abi.ABI{}, fmt.Errorf("failed to read ABI file: %w", err)
+	}
+	parsedABI, err := abi.JSON(strings.NewReader(string(abiBytes)))
+	if err != nil {
+		return abi.ABI{}, fmt.Errorf("failed to parse ABI: %w", err)
+	}
+	return parsedABI, nil
+}
+
+// sendError safely sends an error to the errors channel without panicking
+func (i *Indexer) sendError(err error) {
+	select {
+	case i.errors <- err:
+	default:
+		// Channel is closed or full, ignore
+		i.logger.Error("Error sending error to channel: %v", err)
+	}
+}
+
 func (i *Indexer) Stop() error {
 	i.logger.Info("Stopping indexer...")
 	i.healthServer.SetStatus("unhealthy")
 
-	close(i.errors)
 	// Stop health check server
 	if err := i.healthServer.Stop(); err != nil {
 		i.logger.Error("Error stopping health check server: %v", err)
@@ -320,7 +393,7 @@ func (i *Indexer) Stop() error {
 	i.cancel()
 
 	// wait until all goroutines finish
-	i.wg.Wait()
+	i.subscriptionWG.Wait()
 
 	i.extractor.Stop()
 	i.transformer.Stop()

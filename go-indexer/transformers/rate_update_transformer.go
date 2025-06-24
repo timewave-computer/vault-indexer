@@ -28,10 +28,6 @@ func NewRateUpdateTransformer(db *supa.Client, ethClient *ethclient.Client) *Rat
 	}
 }
 
-func (w *RateUpdateTransformer) SetEthClient(ethClient *ethclient.Client) {
-	w.ethClient = ethClient
-}
-
 type ProcessRateUpdate struct {
 	ContractAddress string
 	Rate            string

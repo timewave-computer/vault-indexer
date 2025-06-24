@@ -35,9 +35,6 @@ type Transformer struct {
 	maxRetries    int
 	lastError     error
 	lastErrorTime *time.Time
-
-	rateUpdateTransformer *transformers.RateUpdateTransformer
-	positionTransformer   *transformers.PositionTransformer
 }
 
 // NewTransformer creates a new transformer instance
@@ -72,18 +69,16 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client
 	healthServer := health.NewServer(8081, "transformer") // Different port for transformer health checks
 
 	return &Transformer{
-		db:                    supa,
-		pgdb:                  pgdb,
-		ctx:                   ctx,
-		cancel:                cancel,
-		logger:                logger.NewLogger("Transformer"),
-		maxRetries:            5,
-		lastError:             nil,
-		retryCount:            0,
-		transformHandler:      transformHandler,
-		healthServer:          healthServer,
-		rateUpdateTransformer: rateUpdateTransformer,
-		positionTransformer:   positionTransformer,
+		db:               supa,
+		pgdb:             pgdb,
+		ctx:              ctx,
+		cancel:           cancel,
+		logger:           logger.NewLogger("Transformer"),
+		maxRetries:       5,
+		lastError:        nil,
+		retryCount:       0,
+		transformHandler: transformHandler,
+		healthServer:     healthServer,
 	}, nil
 }
 
@@ -351,9 +346,4 @@ type DatabaseOperations struct {
 
 func ptr[T any](v T) *T {
 	return &v
-}
-
-func (t *Transformer) SetEthClient(ethClient *ethclient.Client) {
-	t.rateUpdateTransformer.SetEthClient(ethClient)
-	t.positionTransformer.SetEthClient(ethClient)
 }

@@ -41,7 +41,7 @@ func (e *Extractor) Stop() {
 	e.cancel()
 }
 
-func (e *Extractor) writeEvent(vLog types.Log, event abi.Event) error {
+func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event) error {
 	eventData, err := parseEvent(vLog, event)
 	if err != nil {
 		return fmt.Errorf("failed to process event: %w", err)
