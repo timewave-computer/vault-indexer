@@ -41,7 +41,7 @@ func (e *Extractor) Stop() {
 	e.cancel()
 }
 
-func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event) error {
+func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event, isPendingBackfill bool) error {
 	eventData, err := parseEvent(vLog, event)
 	if err != nil {
 		return fmt.Errorf("failed to process event: %w", err)
@@ -60,7 +60,8 @@ func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event) error 
 	}
 
 	var response []struct {
-		Id string `json:"id"`
+		Id                string `json:"id"`
+		IsPendingBackfill bool   `json:"is_pending_backfill"`
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
 		return fmt.Errorf("failed to unmarshal database response: %w", err)
@@ -72,7 +73,8 @@ func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event) error 
 
 		now := "now()"
 		_, _, err = e.db.From("events").Update(ToEventIngestionUpdate(database.PublicEventsUpdate{
-			LastUpdatedAt: &now,
+			LastUpdatedAt:     &now,
+			IsPendingBackfill: &isPendingBackfill,
 		}), "", "").Eq("id", eventId).Execute()
 
 		if err != nil {
@@ -81,7 +83,15 @@ func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event) error 
 		return nil
 	} else {
 		// Insert into Supabase
-		_, _, err = e.db.From("events").Insert(eventData, false, "", "", "").Execute()
+		_, _, err = e.db.From("events").Insert(ToEventIngestionInsert(database.PublicEventsInsert{
+			ContractAddress:   eventData.ContractAddress,
+			EventName:         eventData.EventName,
+			BlockNumber:       eventData.BlockNumber,
+			TransactionHash:   eventData.TransactionHash,
+			LogIndex:          eventData.LogIndex,
+			RawData:           eventData.RawData,
+			IsPendingBackfill: &isPendingBackfill,
+		}), false, "", "", "").Execute()
 		if err != nil {
 			return fmt.Errorf("failed to insert event into database: %w", err)
 		}
@@ -151,7 +161,8 @@ func parseEvent(vLog types.Log, event abi.Event) (*EventIngestionInsert, error) 
 }
 
 type EventIngestionUpdate struct {
-	LastUpdatedAt *string `json:"last_updated_at"`
+	LastUpdatedAt     *string `json:"last_updated_at"`
+	IsPendingBackfill *bool   `json:"is_pending_backfill"`
 }
 
 func ToEventIngestionUpdate(u database.PublicEventsUpdate) EventIngestionUpdate {
@@ -159,29 +170,31 @@ func ToEventIngestionUpdate(u database.PublicEventsUpdate) EventIngestionUpdate 
 	// omits empty values so they are not attempted to be updated
 
 	return EventIngestionUpdate{
-		LastUpdatedAt: u.LastUpdatedAt,
+		LastUpdatedAt:     u.LastUpdatedAt,
+		IsPendingBackfill: u.IsPendingBackfill,
 	}
 }
 
 type EventIngestionInsert struct {
-	ContractAddress string      `json:"contract_address"`
-	EventName       string      `json:"event_name"`
-	BlockNumber     int64       `json:"block_number"`
-	TransactionHash string      `json:"transaction_hash"`
-	LogIndex        int32       `json:"log_index"`
-	RawData         interface{} `json:"raw_data"`
+	ContractAddress   string      `json:"contract_address"`
+	EventName         string      `json:"event_name"`
+	BlockNumber       int64       `json:"block_number"`
+	TransactionHash   string      `json:"transaction_hash"`
+	LogIndex          int32       `json:"log_index"`
+	RawData           interface{} `json:"raw_data"`
+	IsPendingBackfill *bool       `json:"is_pending_backfill"`
 }
 
 func ToEventIngestionInsert(u database.PublicEventsInsert) EventIngestionInsert {
 
 	// omits empty values so they are not attempted to be updated
-
 	return EventIngestionInsert{
-		ContractAddress: u.ContractAddress,
-		EventName:       u.EventName,
-		BlockNumber:     u.BlockNumber,
-		TransactionHash: u.TransactionHash,
-		LogIndex:        u.LogIndex,
-		RawData:         u.RawData,
+		ContractAddress:   u.ContractAddress,
+		EventName:         u.EventName,
+		BlockNumber:       u.BlockNumber,
+		TransactionHash:   u.TransactionHash,
+		LogIndex:          u.LogIndex,
+		RawData:           u.RawData,
+		IsPendingBackfill: u.IsPendingBackfill,
 	}
 }

@@ -140,7 +140,13 @@ func (i *Indexer) Start() error {
 	i.logger.Info("Backfill completed")
 
 	/*
-		3. Start transformer (process events saved in database)
+		3. Unfreeze pending backfill events
+	*/
+	i.unfreezePendingBackfillEvents()
+	i.logger.Info("Unfreeze successfull")
+
+	/*
+		4. Start transformer (process events saved in database)
 	*/
 
 	if err := i.transformer.Start(); err != nil {
@@ -235,8 +241,19 @@ func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Eve
 			return err // Bubble up the error so outer loop can reconnect
 
 		case vLog := <-logs:
-			if err := i.extractor.writeIdempotentEvent(vLog, event); err != nil {
+			isPendingBackfill := false
+
+			lastIndexedBlock, err := i.getLastIndexedBlock(contractAddress, event.Name)
+			if err != nil {
+				return fmt.Errorf("failed to get last processed event for contract %s and event %s: %w", contractAddress.String(), event.Name, err)
+			}
+			eventBlockNumber := int64(vLog.BlockNumber)
+			if lastIndexedBlock != nil && eventBlockNumber > *lastIndexedBlock {
+				isPendingBackfill = true
+			}
+			if err := i.extractor.writeIdempotentEvent(vLog, event, isPendingBackfill); err != nil {
 				i.logger.Error("Error processing event: %v", err)
+				return err
 			}
 		case <-i.ctx.Done():
 			sub.Unsubscribe()
@@ -287,6 +304,7 @@ func (i *Indexer) backfillEvents(currentBlock uint64) {
 			event, exists := parsedABI.Events[eventName]
 			if !exists {
 				i.sendError(fmt.Errorf("event %s not found in ABI", eventName))
+				return
 			}
 
 			query := ethereum.FilterQuery{
@@ -313,8 +331,9 @@ func (i *Indexer) backfillEvents(currentBlock uint64) {
 				default:
 				}
 
-				if err := i.extractor.writeIdempotentEvent(vLog, event); err != nil {
+				if err := i.extractor.writeIdempotentEvent(vLog, event, false); err != nil {
 					i.sendError(fmt.Errorf("failed to process event: %w", err))
+					return
 				}
 				i.logger.Info("Sleeping for 15 seconds during backfill")
 				time.Sleep(15 * time.Second)
@@ -332,6 +351,7 @@ func (i *Indexer) getLastIndexedBlock(
 		Select("block_number", "", false).
 		Eq("contract_address", contractAddress.String()).
 		Eq("event_name", eventName).
+		Eq("is_pending_backfill", "false").
 		Order("block_number", &postgrest.OrderOpts{Ascending: false}).
 		Limit(1, "").
 		Execute()
@@ -355,6 +375,19 @@ func (i *Indexer) getLastIndexedBlock(
 	lastIndexedEvent := indexedEvents[0]
 
 	return &lastIndexedEvent.BlockNumber, nil
+}
+
+func (i *Indexer) unfreezePendingBackfillEvents() {
+	now := "now()"
+	falsePtr := false
+	i.logger.Info("Unfreezing pending backfill events")
+	_, _, err := i.supabaseClient.From("events").Update(ToEventIngestionUpdate(database.PublicEventsUpdate{
+		IsPendingBackfill: &falsePtr,
+		LastUpdatedAt:     &now,
+	}), "", "").Eq("is_pending_backfill", "true").Execute()
+	if err != nil {
+		i.logger.Error("Error unfreezing pending backfill events: %v", err)
+	}
 }
 
 func (i *Indexer) loadAbi(contract config.ContractConfig) (abi.ABI, error) {

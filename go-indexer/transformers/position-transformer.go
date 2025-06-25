@@ -151,7 +151,7 @@ func (p *PositionTransformer) GetMostRecentPosition(address string, contractAddr
 
 	pos := positions[0]
 
-	if pos.IsTerminated != nil && *pos.IsTerminated {
+	if pos.IsTerminated {
 		return nil, nil
 	}
 
@@ -165,7 +165,7 @@ func (p *PositionTransformer) ComputeTransfer(args ProcessPosition, senderPositi
 
 	positionIndexId := maxPositionIndexId
 
-	if receiverPosition == nil || (receiverPosition.IsTerminated != nil && *receiverPosition.IsTerminated) {
+	if receiverPosition == nil || receiverPosition.IsTerminated {
 		// create a new position
 		positionIndexId++
 		inserts = append(inserts, database.ToPositionInsert(database.PublicPositionsInsert{
