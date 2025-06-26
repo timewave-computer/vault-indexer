@@ -140,6 +140,3 @@ Visit the api at `localhost:3000/v1`
 
 ## API docs and schema
 Docs served at `/docs`. Generated automatically
-
-
-
