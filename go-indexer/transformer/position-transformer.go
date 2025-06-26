@@ -53,14 +53,6 @@ type ProcessPosition struct {
 
 func (p *PositionTransformer) Transfer(args ProcessPosition) ([]database.PositionInsert, []database.PositionUpdate, error) {
 
-	blockHeader, testerr := p.ethClient.HeaderByNumber(p.ctx, big.NewInt(int64(args.BlockNumber)))
-	p.logger.Info("blockHeader: %v", blockHeader)
-
-	if testerr != nil {
-		p.logger.Error("error getting block header: %v", testerr)
-		return nil, nil, testerr
-	}
-
 	// mint, handled by Deposit event
 	if args.SenderAddress == ZERO_ADDRESS.Hex() {
 		return nil, nil, nil
