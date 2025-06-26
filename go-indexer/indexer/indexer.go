@@ -27,17 +27,18 @@ import (
 
 // Indexer handles blockchain event indexing and position tracking
 type Indexer struct {
-	config         *config.Config
-	ethClient      *ethclient.Client
-	supabaseClient *supa.Client
-	ctx            context.Context
-	cancel         context.CancelFunc
-	postgresClient *sql.DB
-	extractor      *Extractor
-	transformer    *Transformer
-	logger         *logger.Logger
-	healthServer   *health.Server
-	sortedQueue    *EventQueue
+	config                *config.Config
+	ethClient             *ethclient.Client
+	supabaseClient        *supa.Client
+	ctx                   context.Context
+	cancel                context.CancelFunc
+	postgresClient        *sql.DB
+	extractor             *Extractor
+	transformer           *Transformer
+	logger                *logger.Logger
+	healthServer          *health.Server
+	sortedQueue           *EventQueue
+	requiredConfirmations uint64
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
@@ -80,17 +81,18 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	healthServer := health.NewServer(8080, "event_ingestion") // Default port for indexer health checks
 
 	return &Indexer{
-		config:         cfg,
-		postgresClient: postgresClient,
-		ethClient:      ethClient,
-		supabaseClient: supabaseClient,
-		ctx:            ctx,
-		cancel:         cancel,
-		extractor:      extractor,
-		transformer:    transformer,
-		logger:         indexerLogger,
-		healthServer:   healthServer,
-		sortedQueue:    NewEventQueue(),
+		config:                cfg,
+		postgresClient:        postgresClient,
+		ethClient:             ethClient,
+		supabaseClient:        supabaseClient,
+		ctx:                   ctx,
+		cancel:                cancel,
+		extractor:             extractor,
+		transformer:           transformer,
+		logger:                indexerLogger,
+		healthServer:          healthServer,
+		sortedQueue:           NewEventQueue(),
+		requiredConfirmations: 4,
 	}, nil
 }
 
@@ -112,7 +114,7 @@ func (i *Indexer) Start() error {
 		1. Start subscription and writing events immediately
 	*/
 	i.logger.Info("Setting up subscriptions for %d contracts...", len(i.config.Contracts))
-	err = i.setupSubscriptions(currentBlock) // blocking
+	err = i.setupSubscriptions() // blocking
 	if err != nil {
 		return fmt.Errorf("failed to setup subscriptions: %w", err)
 	}
@@ -120,20 +122,17 @@ func (i *Indexer) Start() error {
 	i.logger.Info("Subscriptions created")
 	i.logger.Info("Sorted queue length: %d", i.sortedQueue.Len())
 
-	go func() {
-		for {
-			event, ok := i.sortedQueue.Next()
-			if !ok || event == nil {
-				time.Sleep(1 * time.Second)
-				continue
-			}
-			i.logger.Info("Processing event: %v", *event)
-		}
-	}()
-
 	/*
 		2. Backfill with idempotency [lastProcessedBlock,currentBlock]
 	*/
+	err = i.backfillEvents(currentBlock)
+	if err != nil {
+		return fmt.Errorf("failed to backfill events: %w", err)
+	}
+
+	i.logger.Info("Backfill completed")
+
+	i.sortedQueue.Print()
 
 	/*
 		4. Start processor (process events from sorted queue)
@@ -234,6 +233,95 @@ func (i *Indexer) setupSubscriptions() error {
 	return nil
 }
 
+func (i *Indexer) backfillEvents(_currentBlock uint64) error {
+	i.logger.Info("Backfilling events from current block %d...", _currentBlock)
+
+	errors := make(chan error, len(i.config.Contracts)*10)
+	wg := sync.WaitGroup{}
+
+	go func() {
+		for {
+			select {
+			case err := <-errors:
+				i.logger.Error("Backfill Error: %v", err)
+				i.Stop()
+				return
+			case <-i.ctx.Done():
+				// context cancelled, stop listening for errors
+				return
+			}
+		}
+	}()
+
+	for _, contractConfig := range i.config.Contracts {
+
+		for _, eventName := range contractConfig.Events {
+			wg.Add(1)
+			parsedABI, err := i.loadAbi(contractConfig)
+			if err != nil {
+				return fmt.Errorf("failed to load ABI for contract %s: %w", contractConfig.Address, err)
+			}
+			event := parsedABI.Events[eventName]
+
+			go func(contractConfig config.ContractConfig, event abi.Event) {
+				defer wg.Done()
+				contractAddress := common.HexToAddress(contractConfig.Address)
+
+				select {
+				case <-i.ctx.Done():
+					return
+				default:
+					// continue
+				}
+
+				i.logger.Info("Backfilling events for %s on contract %s", event, contractConfig.Address)
+				lastIndexedBlock, err := i.getLastIndexedBlock(contractAddress, event)
+				if err != nil {
+					errors <- fmt.Errorf("failed to get last indexed block: %w", err)
+					return
+				}
+				if lastIndexedBlock == nil {
+					v := int64(contractConfig.StartBlock)
+					lastIndexedBlock = &v
+				}
+
+				fromBlock := big.NewInt(int64(*lastIndexedBlock))
+				toBlock := big.NewInt(int64(_currentBlock))
+
+				query := ethereum.FilterQuery{
+					Addresses: []common.Address{contractAddress},
+					Topics:    [][]common.Hash{{event.ID}},
+					FromBlock: fromBlock,
+					ToBlock:   toBlock,
+				}
+
+				logs, err := i.ethClient.FilterLogs(i.ctx, query)
+				if err != nil {
+					errors <- fmt.Errorf("failed to get logs: %w", err)
+					return
+				}
+
+				for _, vLog := range logs {
+					i.logger.Debug("Received backfill log: %v", vLog)
+					eventLog := EventLog{
+						BlockNumber:     vLog.BlockNumber,
+						LogIndex:        vLog.Index,
+						Event:           event,
+						Data:            vLog,
+						ContractAddress: contractAddress,
+					}
+					i.sortedQueue.Insert(eventLog)
+				}
+			}(contractConfig, event)
+		}
+	}
+
+	wg.Wait()
+
+	i.logger.Info("Backfill completed")
+	return nil
+}
+
 func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Event) error {
 	i.logger.Debug("Subscribing to %s on contract %s", event.Name, contractAddress.String())
 
@@ -275,41 +363,6 @@ func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Eve
 	}
 }
 
-func (i *Indexer) getLastIndexedBlock(
-	contractAddress common.Address,
-	eventName string,
-) (*int64, error) {
-
-	data, _, err := i.supabaseClient.From("events").
-		Select("block_number", "", false).
-		Eq("contract_address", contractAddress.String()).
-		Eq("event_name", eventName).
-		Eq("is_pending_backfill", "false").
-		Order("block_number", &postgrest.OrderOpts{Ascending: false}).
-		Limit(1, "").
-		Execute()
-
-	if err != nil {
-		return nil, err
-	}
-
-	var indexedEvents []database.PublicEventsSelect
-
-	if err := json.Unmarshal(data, &indexedEvents); err != nil {
-		return nil, err
-	}
-
-	i.logger.Debug("Last indexed block for %s on %s: %v", eventName, contractAddress.String(), indexedEvents)
-
-	if len(indexedEvents) == 0 {
-		return nil, nil
-	}
-
-	lastIndexedEvent := indexedEvents[0]
-
-	return &lastIndexedEvent.BlockNumber, nil
-}
-
 func (i *Indexer) loadAbi(contract config.ContractConfig) (abi.ABI, error) {
 	abiPath := filepath.Join("abis", contract.ABIPath)
 	abiBytes, err := os.ReadFile(abiPath)
@@ -343,4 +396,32 @@ func (i *Indexer) Stop() error {
 	i.postgresClient.Close()
 
 	return nil
+}
+
+func (i *Indexer) getLastIndexedBlock(contractAddress common.Address, event abi.Event) (*int64, error) {
+	data, _, err := i.supabaseClient.From("events").
+		Select("block_number", "", false).
+		Eq("contract_address", contractAddress.String()).
+		Eq("event_name", event.Name).
+		Order("block_number", &postgrest.OrderOpts{Ascending: false}).
+		Limit(1, "").
+		Execute()
+
+	if err != nil {
+		return nil, err
+	}
+
+	var indexedEvents []database.PublicEventsSelect
+
+	if err := json.Unmarshal(data, &indexedEvents); err != nil {
+		return nil, err
+	}
+
+	if len(indexedEvents) == 0 {
+		return nil, nil
+	}
+
+	lastIndexedEvent := indexedEvents[0]
+
+	return &lastIndexedEvent.BlockNumber, nil
 }

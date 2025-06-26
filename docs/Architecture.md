@@ -26,7 +26,7 @@ event written to processing queue (->eventQueue) [sorted insert]
 ```go
 for each (contract,event)
 	[in batches of 100 blocks]
-	query event logs from [lastIndexedBlock, CB - N ]
+	query event logs from [lastIndexedBlock, CB ]
 	write to processing queue (->eventQueue) [sorted insert]
 ```
 	
