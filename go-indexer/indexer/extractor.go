@@ -41,7 +41,7 @@ func (e *Extractor) Stop() {
 	e.cancel()
 }
 
-func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event, isPendingBackfill bool) error {
+func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event) error {
 	eventData, err := parseEvent(vLog, event)
 	if err != nil {
 		return fmt.Errorf("failed to process event: %w", err)
@@ -73,8 +73,7 @@ func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event, isPend
 
 		now := "now()"
 		_, _, err = e.db.From("events").Update(ToEventIngestionUpdate(database.PublicEventsUpdate{
-			LastUpdatedAt:     &now,
-			IsPendingBackfill: &isPendingBackfill,
+			LastUpdatedAt: &now,
 		}), "", "").Eq("id", eventId).Execute()
 
 		if err != nil {
@@ -84,13 +83,12 @@ func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event, isPend
 	} else {
 		// Insert into Supabase
 		_, _, err = e.db.From("events").Insert(ToEventIngestionInsert(database.PublicEventsInsert{
-			ContractAddress:   eventData.ContractAddress,
-			EventName:         eventData.EventName,
-			BlockNumber:       eventData.BlockNumber,
-			TransactionHash:   eventData.TransactionHash,
-			LogIndex:          eventData.LogIndex,
-			RawData:           eventData.RawData,
-			IsPendingBackfill: &isPendingBackfill,
+			ContractAddress: eventData.ContractAddress,
+			EventName:       eventData.EventName,
+			BlockNumber:     eventData.BlockNumber,
+			TransactionHash: eventData.TransactionHash,
+			LogIndex:        eventData.LogIndex,
+			RawData:         eventData.RawData,
 		}), false, "", "", "").Execute()
 		if err != nil {
 			return fmt.Errorf("failed to insert event into database: %w", err)

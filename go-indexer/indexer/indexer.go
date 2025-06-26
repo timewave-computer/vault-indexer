@@ -129,24 +129,19 @@ func (i *Indexer) Start() error {
 	i.logger.Info("Setting up subscriptions for %d contracts...", len(i.config.Contracts))
 	i.setupSubscriptions()
 	i.subscriptionWG.Wait()
+
 	i.logger.Info("Subscriptions created")
 
 	/*
 		2. Backfill with idempotency [lastProcessedBlock,currentBlock]
 	*/
 
-	i.logger.Info("Backfilling events from current block %d...", currentBlock)
-	i.backfillEvents(currentBlock)
-	i.logger.Info("Backfill completed")
+	// i.logger.Info("Backfilling events from current block %d...", currentBlock)
+	// i.backfillEvents(currentBlock)
+	// i.logger.Info("Backfill completed")
 
 	/*
-		3. Unfreeze pending backfill events
-	*/
-	i.unfreezePendingBackfillEvents()
-	i.logger.Info("Unfreeze successfull")
-
-	/*
-		4. Start transformer (process events saved in database)
+		3. Start transformer (process events saved in database)
 	*/
 
 	if err := i.transformer.Start(); err != nil {
@@ -225,6 +220,8 @@ func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Eve
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 		Topics:    [][]common.Hash{{event.ID}},
+		FromBlock: big.NewInt(int64(22694852)),
+		ToBlock:   big.NewInt(int64(22783028)),
 	}
 
 	logs := make(chan types.Log)
@@ -241,17 +238,8 @@ func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Eve
 			return err // Bubble up the error so outer loop can reconnect
 
 		case vLog := <-logs:
-			isPendingBackfill := false
-
-			lastIndexedBlock, err := i.getLastIndexedBlock(contractAddress, event.Name)
-			if err != nil {
-				return fmt.Errorf("failed to get last processed event for contract %s and event %s: %w", contractAddress.String(), event.Name, err)
-			}
-			eventBlockNumber := int64(vLog.BlockNumber)
-			if lastIndexedBlock != nil && eventBlockNumber > *lastIndexedBlock {
-				isPendingBackfill = true
-			}
-			if err := i.extractor.writeIdempotentEvent(vLog, event, isPendingBackfill); err != nil {
+			i.logger.Info("Received log: %v", vLog)
+			if err := i.extractor.writeIdempotentEvent(vLog, event); err != nil {
 				i.logger.Error("Error processing event: %v", err)
 				return err
 			}
@@ -331,7 +319,7 @@ func (i *Indexer) backfillEvents(currentBlock uint64) {
 				default:
 				}
 
-				if err := i.extractor.writeIdempotentEvent(vLog, event, false); err != nil {
+				if err := i.extractor.writeIdempotentEvent(vLog, event); err != nil {
 					i.sendError(fmt.Errorf("failed to process event: %w", err))
 					return
 				}
