@@ -68,12 +68,12 @@ func (q *EventQueue) Insert(event EventLog) {
 	heap.Push(q, event)
 }
 
-func (q *EventQueue) Next() (EventLog, bool) {
+func (q *EventQueue) Next() (*EventLog, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.Len() == 0 {
-		return EventLog{}, false
+		return nil, false
 	}
 	ev := heap.Pop(q).(EventLog)
-	return ev, true
+	return &ev, true
 }

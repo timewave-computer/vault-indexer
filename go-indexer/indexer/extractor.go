@@ -179,7 +179,6 @@ type EventIngestionInsert struct {
 	TransactionHash string      `json:"transaction_hash"`
 	LogIndex        int32       `json:"log_index"`
 	RawData         interface{} `json:"raw_data"`
-	BlockHash       *string     `json:"block_hash"`
 }
 
 func ToEventIngestionInsert(u database.PublicEventsInsert) EventIngestionInsert {
@@ -191,6 +190,5 @@ func ToEventIngestionInsert(u database.PublicEventsInsert) EventIngestionInsert 
 		TransactionHash: u.TransactionHash,
 		LogIndex:        u.LogIndex,
 		RawData:         u.RawData,
-		BlockHash:       u.BlockHash,
 	}
 }

@@ -35,10 +35,9 @@ type Indexer struct {
 	postgresClient *sql.DB
 	extractor      *Extractor
 	transformer    *Transformer
-	subscriptionWG sync.WaitGroup
 	logger         *logger.Logger
 	healthServer   *health.Server
-	errors         chan error
+	sortedQueue    *EventQueue
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
@@ -80,8 +79,6 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	// Create health check server
 	healthServer := health.NewServer(8080, "event_ingestion") // Default port for indexer health checks
 
-	errors := make(chan error, len(cfg.Contracts)*10)
-
 	return &Indexer{
 		config:         cfg,
 		postgresClient: postgresClient,
@@ -93,7 +90,7 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 		transformer:    transformer,
 		logger:         indexerLogger,
 		healthServer:   healthServer,
-		errors:         errors,
+		sortedQueue:    NewEventQueue(),
 	}, nil
 }
 
@@ -111,37 +108,39 @@ func (i *Indexer) Start() error {
 	}
 	i.logger.Info("Current block height: %d", currentBlock)
 
-	// Listen for errors from go routines
-	go func() {
-		select {
-		case err := <-i.errors:
-			i.logger.Error("Error: %v", err)
-			i.Stop()
-		case <-i.ctx.Done():
-			// context cancelled, stop listening for errors
-			return
-		}
-	}()
-
 	/*
 		1. Start subscription and writing events immediately
 	*/
 	i.logger.Info("Setting up subscriptions for %d contracts...", len(i.config.Contracts))
-	i.setupSubscriptions()
-	i.subscriptionWG.Wait()
+	err = i.setupSubscriptions(currentBlock) // blocking
+	if err != nil {
+		return fmt.Errorf("failed to setup subscriptions: %w", err)
+	}
 
 	i.logger.Info("Subscriptions created")
+	i.logger.Info("Sorted queue length: %d", i.sortedQueue.Len())
+
+	go func() {
+		for {
+			event, ok := i.sortedQueue.Next()
+			if !ok || event == nil {
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			i.logger.Info("Processing event: %v", *event)
+		}
+	}()
 
 	/*
 		2. Backfill with idempotency [lastProcessedBlock,currentBlock]
 	*/
 
-	// i.logger.Info("Backfilling events from current block %d...", currentBlock)
-	// i.backfillEvents(currentBlock)
-	// i.logger.Info("Backfill completed")
+	/*
+		4. Start processor (process events from sorted queue)
+	*/
 
 	/*
-		3. Start transformer (process events saved in database)
+		5. Start transformer (process events saved in database)
 	*/
 
 	if err := i.transformer.Start(); err != nil {
@@ -160,22 +159,39 @@ func (i *Indexer) Start() error {
 	return nil
 }
 
-func (i *Indexer) setupSubscriptions() {
+func (i *Indexer) setupSubscriptions() error {
+	wg := sync.WaitGroup{}
+	errors := make(chan error, len(i.config.Contracts)*10)
+
+	// listen for errors from subscription go routines
+	go func() {
+		for {
+			select {
+			case err := <-errors:
+				i.logger.Error("Error: %v", err)
+				i.Stop()
+				return
+			case <-i.ctx.Done():
+				// context cancelled, stop listening for errors
+				return
+			}
+		}
+	}()
+
 	for _, contract := range i.config.Contracts {
 		parsedABI, err := i.loadAbi(contract)
 		if err != nil {
-			i.sendError(fmt.Errorf("failed to load ABI for contract %s: %w", contract.Address, err))
-			return
+			return fmt.Errorf("failed to load ABI for contract %s: %w", contract.Address, err)
 		}
 		contractAddress := common.HexToAddress(contract.Address)
 
 		for _, _eventName := range contract.Events {
 			eventName := parsedABI.Events[_eventName]
 
-			i.subscriptionWG.Add(1)
+			wg.Add(1)
 			go func(event abi.Event) {
 				// Signal that this subscription goroutine has started
-				i.subscriptionWG.Done()
+				wg.Done()
 
 				for {
 					// Check if context is cancelled before attempting subscription
@@ -192,7 +208,7 @@ func (i *Indexer) setupSubscriptions() {
 					if err != nil {
 						// Use non-blocking send to avoid panic if channel is closed
 						select {
-						case i.errors <- fmt.Errorf("failed to subscribe to event %s for contract %s: %w", event.Name, contract.Address, err):
+						case errors <- fmt.Errorf("failed to subscribe to event %s for contract %s: %w", event.Name, contract.Address, err):
 						default:
 							// Channel is closed or full, ignore
 						}
@@ -212,6 +228,10 @@ func (i *Indexer) setupSubscriptions() {
 			}(eventName)
 		}
 	}
+
+	wg.Wait()
+
+	return nil
 }
 
 func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Event) error {
@@ -239,93 +259,18 @@ func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Eve
 
 		case vLog := <-logs:
 			i.logger.Info("Received log: %v", vLog)
-			if err := i.extractor.writeIdempotentEvent(vLog, event); err != nil {
-				i.logger.Error("Error processing event: %v", err)
-				return err
+			eventLog := EventLog{
+				BlockNumber:     vLog.BlockNumber,
+				LogIndex:        vLog.Index,
+				Event:           event,
+				Data:            vLog,
+				ContractAddress: contractAddress,
 			}
+			i.sortedQueue.Insert(eventLog)
+			i.logger.Info("Event inserted into sorted queue: block %d, log index %d", vLog.BlockNumber, vLog.Index)
 		case <-i.ctx.Done():
 			sub.Unsubscribe()
 			return nil
-		}
-	}
-}
-
-func (i *Indexer) backfillEvents(currentBlock uint64) {
-	for _, contract := range i.config.Contracts {
-
-		parsedABI, err := i.loadAbi(contract)
-		if err != nil {
-			i.sendError(fmt.Errorf("failed to load ABI for contract %s: %w", contract.Address, err))
-			return
-		}
-
-		contractAddress := common.HexToAddress(contract.Address)
-
-		// Create filter query for each event
-		for _, eventName := range contract.Events {
-
-			lastIndexedBlock, err := i.getLastIndexedBlock(contractAddress, eventName)
-			if err != nil {
-				i.sendError(fmt.Errorf("failed to get last processed event for contract %s and event %s: %w", contract.Address, eventName, err))
-				return
-			}
-
-			toBlock := big.NewInt(int64(currentBlock))
-
-			var fromBlock *big.Int
-			if lastIndexedBlock == nil {
-				i.logger.Info("Backfilling from start block %d for %s on %s", contract.StartBlock, eventName, contract.Address)
-				fromBlock = big.NewInt(int64(contract.StartBlock))
-			} else {
-				i.logger.Info("Backfilling from last indexed block %d for %s on %s", *lastIndexedBlock, eventName, contract.Address)
-				fromBlock = big.NewInt(int64(*lastIndexedBlock)) // its ok if there is overlap in the last indexed block, events are idempotent
-			}
-
-			// Check if context is cancelled before processing each event
-			select {
-			case <-i.ctx.Done():
-				// Don't send error on context cancellation during shutdown
-				return
-			default:
-			}
-
-			event, exists := parsedABI.Events[eventName]
-			if !exists {
-				i.sendError(fmt.Errorf("event %s not found in ABI", eventName))
-				return
-			}
-
-			query := ethereum.FilterQuery{
-				FromBlock: fromBlock,
-				ToBlock:   toBlock,
-				Addresses: []common.Address{contractAddress},
-				Topics:    [][]common.Hash{{event.ID}},
-			}
-
-			logs, err := i.ethClient.FilterLogs(i.ctx, query)
-			if err != nil {
-				i.sendError(fmt.Errorf("failed to get logs: %w", err))
-				return
-			}
-
-			// Process each log
-			for _, vLog := range logs {
-
-				// Check if context is cancelled before processing each log
-				select {
-				case <-i.ctx.Done():
-					// Don't send error on context cancellation during shutdown
-					return
-				default:
-				}
-
-				if err := i.extractor.writeIdempotentEvent(vLog, event); err != nil {
-					i.sendError(fmt.Errorf("failed to process event: %w", err))
-					return
-				}
-				i.logger.Info("Sleeping for 15 seconds during backfill")
-				time.Sleep(15 * time.Second)
-			}
 		}
 	}
 }
@@ -378,16 +323,6 @@ func (i *Indexer) loadAbi(contract config.ContractConfig) (abi.ABI, error) {
 	return parsedABI, nil
 }
 
-// sendError safely sends an error to the errors channel without panicking
-func (i *Indexer) sendError(err error) {
-	select {
-	case i.errors <- err:
-	default:
-		// Channel is closed or full, ignore
-		i.logger.Error("Error sending error to channel: %v", err)
-	}
-}
-
 func (i *Indexer) Stop() error {
 	i.logger.Info("Stopping indexer...")
 	i.healthServer.SetStatus("unhealthy")
@@ -399,9 +334,6 @@ func (i *Indexer) Stop() error {
 
 	// signal writers to stop
 	i.cancel()
-
-	// wait until all goroutines finish
-	i.subscriptionWG.Wait()
 
 	i.extractor.Stop()
 	i.transformer.Stop()
