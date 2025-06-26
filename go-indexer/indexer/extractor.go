@@ -89,6 +89,7 @@ func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event) error 
 			TransactionHash: eventData.TransactionHash,
 			LogIndex:        eventData.LogIndex,
 			RawData:         eventData.RawData,
+			// TODO: pass block hash
 		}), false, "", "", "").Execute()
 		if err != nil {
 			return fmt.Errorf("failed to insert event into database: %w", err)
@@ -159,8 +160,7 @@ func parseEvent(vLog types.Log, event abi.Event) (*EventIngestionInsert, error) 
 }
 
 type EventIngestionUpdate struct {
-	LastUpdatedAt     *string `json:"last_updated_at"`
-	IsPendingBackfill *bool   `json:"is_pending_backfill"`
+	LastUpdatedAt *string `json:"last_updated_at"`
 }
 
 func ToEventIngestionUpdate(u database.PublicEventsUpdate) EventIngestionUpdate {
@@ -168,31 +168,29 @@ func ToEventIngestionUpdate(u database.PublicEventsUpdate) EventIngestionUpdate 
 	// omits empty values so they are not attempted to be updated
 
 	return EventIngestionUpdate{
-		LastUpdatedAt:     u.LastUpdatedAt,
-		IsPendingBackfill: u.IsPendingBackfill,
+		LastUpdatedAt: u.LastUpdatedAt,
 	}
 }
 
 type EventIngestionInsert struct {
-	ContractAddress   string      `json:"contract_address"`
-	EventName         string      `json:"event_name"`
-	BlockNumber       int64       `json:"block_number"`
-	TransactionHash   string      `json:"transaction_hash"`
-	LogIndex          int32       `json:"log_index"`
-	RawData           interface{} `json:"raw_data"`
-	IsPendingBackfill *bool       `json:"is_pending_backfill"`
+	ContractAddress string      `json:"contract_address"`
+	EventName       string      `json:"event_name"`
+	BlockNumber     int64       `json:"block_number"`
+	TransactionHash string      `json:"transaction_hash"`
+	LogIndex        int32       `json:"log_index"`
+	RawData         interface{} `json:"raw_data"`
+	BlockHash       *string     `json:"block_hash"`
 }
 
 func ToEventIngestionInsert(u database.PublicEventsInsert) EventIngestionInsert {
-
 	// omits empty values so they are not attempted to be updated
 	return EventIngestionInsert{
-		ContractAddress:   u.ContractAddress,
-		EventName:         u.EventName,
-		BlockNumber:       u.BlockNumber,
-		TransactionHash:   u.TransactionHash,
-		LogIndex:          u.LogIndex,
-		RawData:           u.RawData,
-		IsPendingBackfill: u.IsPendingBackfill,
+		ContractAddress: u.ContractAddress,
+		EventName:       u.EventName,
+		BlockNumber:     u.BlockNumber,
+		TransactionHash: u.TransactionHash,
+		LogIndex:        u.LogIndex,
+		RawData:         u.RawData,
+		BlockHash:       u.BlockHash,
 	}
 }

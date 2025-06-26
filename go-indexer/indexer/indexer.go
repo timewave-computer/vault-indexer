@@ -365,19 +365,6 @@ func (i *Indexer) getLastIndexedBlock(
 	return &lastIndexedEvent.BlockNumber, nil
 }
 
-func (i *Indexer) unfreezePendingBackfillEvents() {
-	now := "now()"
-	falsePtr := false
-	i.logger.Info("Unfreezing pending backfill events")
-	_, _, err := i.supabaseClient.From("events").Update(ToEventIngestionUpdate(database.PublicEventsUpdate{
-		IsPendingBackfill: &falsePtr,
-		LastUpdatedAt:     &now,
-	}), "", "").Eq("is_pending_backfill", "true").Execute()
-	if err != nil {
-		i.logger.Error("Error unfreezing pending backfill events: %v", err)
-	}
-}
-
 func (i *Indexer) loadAbi(contract config.ContractConfig) (abi.ABI, error) {
 	abiPath := filepath.Join("abis", contract.ABIPath)
 	abiBytes, err := os.ReadFile(abiPath)
