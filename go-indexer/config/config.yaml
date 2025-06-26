@@ -20,9 +20,18 @@ contracts:
         - "Transfer"
         - "WithdrawRequested"
         - "RateUpdated"
-    - name: "Test1"
+    - name: "WBTC Test1"
       address: "0x3EA82BDA12e3cba18E4A9fD0cf7DE2fB78cA4d32"
       start_block: 22694852
+      abi_path: "vault.abi.json"
+      events:
+        - "Deposit"
+        - "Transfer"
+        - "WithdrawRequested"
+        - "RateUpdated"
+    - name: "LBTC Test1"
+      address: "0x1c2d8f447167fa7d28b2ec869df9d320aa2e6a71"
+      start_block: 22783642
       abi_path: "vault.abi.json"
       events:
         - "Deposit"
