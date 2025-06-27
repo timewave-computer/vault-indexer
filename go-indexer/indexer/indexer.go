@@ -39,6 +39,7 @@ type Indexer struct {
 	healthServer          *health.Server
 	eventQueue            *EventQueue
 	requiredConfirmations uint64
+	once                  sync.Once
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
@@ -359,11 +360,11 @@ func (i *Indexer) handleEventIngestion() error {
 			if err != nil {
 				errors <- fmt.Errorf("failed to get current block number: %w", err)
 			}
-			if event.BlockNumber >= currentBlock+i.requiredConfirmations {
+			if (event.BlockNumber + i.requiredConfirmations) > currentBlock {
 				// not enough confirmations, put back in queue
-				logger.Info("Not enough confirmations, putting back in queue. Event name: %s, block %d, current block %d, required height for ingestion: %d", event.Event.Name, event.BlockNumber, currentBlock, currentBlock+i.requiredConfirmations)
+				logger.Info("Not enough confirmations, putting back in queue and waiting 15 seconds. Event name: %s, block %d, current block %d, required height for ingestion: %d", event.Event.Name, event.BlockNumber, currentBlock, currentBlock+i.requiredConfirmations)
 				i.eventQueue.Insert(*event)
-				time.Sleep(10 * time.Second)
+				time.Sleep(15 * time.Second)
 				continue
 			}
 
@@ -432,23 +433,23 @@ func (i *Indexer) loadAbi(contract config.ContractConfig) (abi.ABI, error) {
 
 func (i *Indexer) Stop() error {
 	i.once.Do(func() {
-	i.logger.Info("Stopping indexer...")
-	i.healthServer.SetStatus("unhealthy")
+		i.logger.Info("Stopping indexer...")
+		i.healthServer.SetStatus("unhealthy")
 
-	// Stop health check server
-	if err := i.healthServer.Stop(); err != nil {
-		i.logger.Error("Error stopping health check server: %v", err)
-	}
+		// Stop health check server
+		if err := i.healthServer.Stop(); err != nil {
+			i.logger.Error("Error stopping health check server: %v", err)
+		}
 
-	// signal writers to stop
-	i.cancel()
+		// signal writers to stop
+		i.cancel()
 
-	i.extractor.Stop()
-	i.transformer.Stop()
+		i.extractor.Stop()
+		i.transformer.Stop()
 
-	// finally release external resources
-	i.ethClient.Close()
-	i.postgresClient.Close()
+		// finally release external resources
+		i.ethClient.Close()
+		i.postgresClient.Close()
 	})
 	return nil
 }
