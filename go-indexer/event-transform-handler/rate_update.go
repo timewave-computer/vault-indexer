@@ -4,14 +4,14 @@ import (
 	"fmt"
 
 	"github.com/timewave/vault-indexer/go-indexer/database"
-	"github.com/timewave/vault-indexer/go-indexer/transformer"
+	transformers "github.com/timewave/vault-indexer/go-indexer/transformers"
 )
 
 type RateUpdateHandler struct {
-	rateUpdateTransformer *transformer.RateUpdateTransformer
+	rateUpdateTransformer *transformers.RateUpdateTransformer
 }
 
-func NewRateUpdateHandler(rateUpdateTransformer *transformer.RateUpdateTransformer) *RateUpdateHandler {
+func NewRateUpdateHandler(rateUpdateTransformer *transformers.RateUpdateTransformer) *RateUpdateHandler {
 	return &RateUpdateHandler{
 		rateUpdateTransformer: rateUpdateTransformer,
 	}
@@ -45,7 +45,7 @@ func (h *RateUpdateHandler) Handle(event database.PublicEventsSelect, eventData 
 	}
 
 	// Process position transformation
-	inserts, err := h.rateUpdateTransformer.Transform(transformer.ProcessRateUpdate{
+	inserts, err := h.rateUpdateTransformer.Transform(transformers.ProcessRateUpdate{
 		ContractAddress: event.ContractAddress,
 		Rate:            rateUpdateData.Rate,
 		BlockNumber:     event.BlockNumber,

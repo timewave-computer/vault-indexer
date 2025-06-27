@@ -16,7 +16,7 @@ import (
 	transformHandler "github.com/timewave/vault-indexer/go-indexer/event-transform-handler"
 	"github.com/timewave/vault-indexer/go-indexer/health"
 	"github.com/timewave/vault-indexer/go-indexer/logger"
-	transformer "github.com/timewave/vault-indexer/go-indexer/transformer"
+	transformers "github.com/timewave/vault-indexer/go-indexer/transformers"
 )
 
 // Transformer handles processing of raw events into derived data
@@ -35,9 +35,6 @@ type Transformer struct {
 	maxRetries    int
 	lastError     error
 	lastErrorTime *time.Time
-
-	rateUpdateTransformer *transformer.RateUpdateTransformer
-	positionTransformer   *transformer.PositionTransformer
 }
 
 // NewTransformer creates a new transformer instance
@@ -55,9 +52,9 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client
 	}
 
 	// initialize transformers
-	positionTransformer := transformer.NewPositionTransformer(supa)
-	withdrawRequestTransformer := transformer.NewWithdrawRequestTransformer(supa)
-	rateUpdateTransformer := transformer.NewRateUpdateTransformer(supa, ethClient)
+	positionTransformer := transformers.NewPositionTransformer(supa)
+	withdrawRequestTransformer := transformers.NewWithdrawRequestTransformer(supa)
+	rateUpdateTransformer := transformers.NewRateUpdateTransformer(supa, ethClient)
 
 	// initialize event transformer handlers
 	depositHandler := transformHandler.NewDepositHandler(positionTransformer)
@@ -72,24 +69,22 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client
 	healthServer := health.NewServer(8081, "transformer") // Different port for transformer health checks
 
 	return &Transformer{
-		db:                    supa,
-		pgdb:                  pgdb,
-		ctx:                   ctx,
-		cancel:                cancel,
-		logger:                logger.NewLogger("Transformer"),
-		maxRetries:            5,
-		lastError:             nil,
-		retryCount:            0,
-		transformHandler:      transformHandler,
-		healthServer:          healthServer,
-		rateUpdateTransformer: rateUpdateTransformer,
-		positionTransformer:   positionTransformer,
+		db:               supa,
+		pgdb:             pgdb,
+		ctx:              ctx,
+		cancel:           cancel,
+		logger:           logger.NewLogger("Transformer"),
+		maxRetries:       5,
+		lastError:        nil,
+		retryCount:       0,
+		transformHandler: transformHandler,
+		healthServer:     healthServer,
 	}, nil
 }
 
 // Start begins the transformation process
 func (t *Transformer) Start() error {
-	t.logger.Info("Starting transformer...")
+	t.logger.Info("Transformer started")
 
 	// Start health check server
 	if err := t.healthServer.Start(); err != nil {
@@ -143,7 +138,7 @@ func (t *Transformer) Start() error {
 				rows.Close()
 
 				if len(events) == 0 {
-					t.logger.Info("No events found, waiting 15 seconds")
+					t.logger.Info("No events to transform, waiting 15 seconds")
 					select {
 					case <-time.After(15 * time.Second):
 					case <-t.ctx.Done():
@@ -152,7 +147,7 @@ func (t *Transformer) Start() error {
 					continue
 				}
 
-				t.logger.Info("Received %d events, processing...", len(events))
+				t.logger.Info("Found %d events to transform, processing...", len(events))
 
 				// Process the entire batch, retrying if any event fails
 				if err := t.processBatch(events); err != nil {
@@ -222,7 +217,7 @@ func (t *Transformer) processBatch(events []database.PublicEventsSelect) error {
 			return err
 		}
 
-		t.logger.Info("Successfully committed transformation for event: %v", event.Id)
+		t.logger.Info("Transformed event: %v", event.Id)
 	}
 
 	return nil // Success
@@ -351,9 +346,4 @@ type DatabaseOperations struct {
 
 func ptr[T any](v T) *T {
 	return &v
-}
-
-func (t *Transformer) SetEthClient(ethClient *ethclient.Client) {
-	t.rateUpdateTransformer.SetEthClient(ethClient)
-	t.positionTransformer.SetEthClient(ethClient)
 }

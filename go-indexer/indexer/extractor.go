@@ -17,7 +17,7 @@ import (
 )
 
 // EventProcessor handles blockchain event processing and storage
-type EventProcessor struct {
+type Extractor struct {
 	db     *supa.Client
 	client *ethclient.Client
 	ctx    context.Context
@@ -25,10 +25,10 @@ type EventProcessor struct {
 	logger *logger.Logger
 }
 
-// NewEventProcessor creates a new event processor
-func NewEventProcessor(db *supa.Client, client *ethclient.Client) *EventProcessor {
+// NewExtractor creates a new event processor
+func NewExtractor(db *supa.Client, client *ethclient.Client) *Extractor {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &EventProcessor{
+	return &Extractor{
 		db:     db,
 		client: client,
 		ctx:    ctx,
@@ -37,11 +37,11 @@ func NewEventProcessor(db *supa.Client, client *ethclient.Client) *EventProcesso
 	}
 }
 
-func (e *EventProcessor) Stop() {
+func (e *Extractor) Stop() {
 	e.cancel()
 }
 
-func (e *EventProcessor) processEvent(vLog types.Log, event abi.Event) error {
+func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event) error {
 	eventData, err := parseEvent(vLog, event)
 	if err != nil {
 		return fmt.Errorf("failed to process event: %w", err)
@@ -68,25 +68,38 @@ func (e *EventProcessor) processEvent(vLog types.Log, event abi.Event) error {
 
 	if len(response) > 0 {
 		eventId := response[0].Id
-		e.logger.Info("Updating existing event: %v", eventId)
-
-		now := "now()"
-		_, _, err = e.db.From("events").Update(ToEventIngestionUpdate(database.PublicEventsUpdate{
-			LastUpdatedAt: &now,
-		}), "", "").Eq("id", eventId).Execute()
-
-		if err != nil {
-			return fmt.Errorf("failed to update event in database: %w", err)
-		}
-		return nil
-	} else {
-		// Insert into Supabase
-		_, _, err = e.db.From("events").Insert(eventData, false, "", "", "").Execute()
-		if err != nil {
-			return fmt.Errorf("failed to insert event into database: %w", err)
-		}
+		e.logger.Info("Event exists in database ( name: %s, block: %d, log index: %d), not inserting: %v", eventData.EventName, eventData.BlockNumber, eventData.LogIndex, eventId)
 		return nil
 	}
+	// Insert into Supabase
+	data, _, err = e.db.From("events").
+		Insert(ToEventIngestionInsert(database.PublicEventsInsert{
+			ContractAddress: eventData.ContractAddress,
+			EventName:       eventData.EventName,
+			BlockNumber:     eventData.BlockNumber,
+			TransactionHash: eventData.TransactionHash,
+			LogIndex:        eventData.LogIndex,
+			RawData:         eventData.RawData,
+			// TODO: pass block hash
+		}), false, "", "", "").
+		Execute()
+
+	if err != nil {
+		return fmt.Errorf("failed to insert event into database: %w", err)
+	}
+	var insertResponse []struct {
+		Id string `json:"id"`
+	}
+	if err := json.Unmarshal(data, &insertResponse); err != nil {
+		return fmt.Errorf("failed to unmarshal insert response: %w", err)
+	}
+	if len(insertResponse) > 0 {
+		id := insertResponse[0].Id
+		e.logger.Info("Inserted event: %v", id)
+		e.logger.Debug("Inserted data for %v: %v", id, eventData)
+	}
+	return nil
+
 }
 
 func parseEvent(vLog types.Log, event abi.Event) (*EventIngestionInsert, error) {
@@ -173,9 +186,7 @@ type EventIngestionInsert struct {
 }
 
 func ToEventIngestionInsert(u database.PublicEventsInsert) EventIngestionInsert {
-
 	// omits empty values so they are not attempted to be updated
-
 	return EventIngestionInsert{
 		ContractAddress: u.ContractAddress,
 		EventName:       u.EventName,

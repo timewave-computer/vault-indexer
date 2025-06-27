@@ -1,4 +1,4 @@
-package transformer
+package transformers
 
 import (
 	"context"
@@ -26,10 +26,6 @@ func NewRateUpdateTransformer(db *supa.Client, ethClient *ethclient.Client) *Rat
 		cancel:    cancel,
 		ethClient: ethClient,
 	}
-}
-
-func (w *RateUpdateTransformer) SetEthClient(ethClient *ethclient.Client) {
-	w.ethClient = ethClient
 }
 
 type ProcessRateUpdate struct {

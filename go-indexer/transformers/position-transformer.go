@@ -1,4 +1,4 @@
-package transformer
+package transformers
 
 import (
 	"context"
@@ -27,10 +27,6 @@ type PositionTransformer struct {
 	cancel    context.CancelFunc
 	logger    *logger.Logger
 	ethClient *ethclient.Client
-}
-
-func (p *PositionTransformer) SetEthClient(ethClient *ethclient.Client) {
-	p.ethClient = ethClient
 }
 
 func NewPositionTransformer(db *supa.Client) *PositionTransformer {
@@ -136,20 +132,26 @@ func (p *PositionTransformer) GetMostRecentPosition(address string, contractAddr
 		Eq("contract_address", contractAddress).
 		Order("position_index_id", &postgrest.OrderOpts{Ascending: false}).
 		Limit(1, "").
-		Single().
 		Execute()
 
 	if err != nil {
 		return nil, nil
 	}
 
-	var pos database.PublicPositionsSelect
-	if err := json.Unmarshal(data, &pos); err != nil {
+	var positions []database.PublicPositionsSelect
+	if err := json.Unmarshal(data, &positions); err != nil {
 		p.logger.Error("Error unmarshaling position: %v", err)
 		return nil, err
 	}
 
-	if pos.IsTerminated != nil && *pos.IsTerminated {
+	if len(positions) == 0 {
+		// no position found
+		return nil, nil
+	}
+
+	pos := positions[0]
+
+	if pos.IsTerminated {
 		return nil, nil
 	}
 
@@ -163,7 +165,7 @@ func (p *PositionTransformer) ComputeTransfer(args ProcessPosition, senderPositi
 
 	positionIndexId := maxPositionIndexId
 
-	if receiverPosition == nil || (receiverPosition.IsTerminated != nil && *receiverPosition.IsTerminated) {
+	if receiverPosition == nil || receiverPosition.IsTerminated {
 		// create a new position
 		positionIndexId++
 		inserts = append(inserts, database.ToPositionInsert(database.PublicPositionsInsert{

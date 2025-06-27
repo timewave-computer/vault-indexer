@@ -4,16 +4,16 @@ import (
 	"fmt"
 
 	"github.com/timewave/vault-indexer/go-indexer/database"
-	"github.com/timewave/vault-indexer/go-indexer/transformer"
+	transformers "github.com/timewave/vault-indexer/go-indexer/transformers"
 )
 
 // TransferHandler handles Transfer events
 type TransferHandler struct {
-	positionTransformer *transformer.PositionTransformer
+	positionTransformer *transformers.PositionTransformer
 }
 
 // NewTransferHandler creates a new transfer handler
-func NewTransferHandler(positionTransformer *transformer.PositionTransformer) *TransferHandler {
+func NewTransferHandler(positionTransformer *transformers.PositionTransformer) *TransferHandler {
 	return &TransferHandler{
 		positionTransformer: positionTransformer,
 	}
@@ -59,7 +59,7 @@ func (h *TransferHandler) Handle(event database.PublicEventsSelect, eventData da
 		return operations, err
 	}
 
-	inserts, updates, err := h.positionTransformer.Transfer(transformer.ProcessPosition{
+	inserts, updates, err := h.positionTransformer.Transfer(transformers.ProcessPosition{
 		ReceiverAddress: transferData.To,
 		SenderAddress:   transferData.From,
 		ContractAddress: event.ContractAddress,

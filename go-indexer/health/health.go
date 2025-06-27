@@ -55,6 +55,10 @@ func (s *Server) Start() error {
 	go func() {
 		if err := s.server.Serve(listener); err != nil && err != http.ErrServerClosed {
 			s.logger.Error("Health check server error: %v", err)
+			s.SetStatus("unhealthy")
+		} else {
+			s.SetStatus("healthy")
+			s.logger.Debug("Health check server started for %s", s.label)
 		}
 	}()
 	return nil

@@ -44,7 +44,7 @@ type PublicPositionsSelect struct {
   ContractAddress         string  `json:"contract_address"`
   CreatedAt               string  `json:"created_at"`
   Id                      string  `json:"id"`
-  IsTerminated            *bool   `json:"is_terminated"`
+  IsTerminated            bool    `json:"is_terminated"`
   OwnerAddress            string  `json:"owner_address"`
   PositionEndHeight       *int64  `json:"position_end_height"`
   PositionIndexId         int64   `json:"position_index_id"`
