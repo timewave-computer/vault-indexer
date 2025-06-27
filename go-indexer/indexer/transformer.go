@@ -84,7 +84,7 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client
 
 // Start begins the transformation process
 func (t *Transformer) Start() error {
-	t.logger.Info("Starting transformer...")
+	t.logger.Info("Transformer started")
 
 	// Start health check server
 	if err := t.healthServer.Start(); err != nil {
@@ -138,7 +138,7 @@ func (t *Transformer) Start() error {
 				rows.Close()
 
 				if len(events) == 0 {
-					t.logger.Info("No events found, waiting 15 seconds")
+					t.logger.Info("No events to transform, waiting 15 seconds")
 					select {
 					case <-time.After(15 * time.Second):
 					case <-t.ctx.Done():
@@ -147,7 +147,7 @@ func (t *Transformer) Start() error {
 					continue
 				}
 
-				t.logger.Info("Received %d events, processing...", len(events))
+				t.logger.Info("Found %d events to transform, processing...", len(events))
 
 				// Process the entire batch, retrying if any event fails
 				if err := t.processBatch(events); err != nil {

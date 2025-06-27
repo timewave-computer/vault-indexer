@@ -60,8 +60,7 @@ func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event) error 
 	}
 
 	var response []struct {
-		Id                string `json:"id"`
-		IsPendingBackfill bool   `json:"is_pending_backfill"`
+		Id string `json:"id"`
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
 		return fmt.Errorf("failed to unmarshal database response: %w", err)
@@ -69,20 +68,12 @@ func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event) error 
 
 	if len(response) > 0 {
 		eventId := response[0].Id
-		e.logger.Info("Updating existing event: %v", eventId)
-
-		now := "now()"
-		_, _, err = e.db.From("events").Update(ToEventIngestionUpdate(database.PublicEventsUpdate{
-			LastUpdatedAt: &now,
-		}), "", "").Eq("id", eventId).Execute()
-
-		if err != nil {
-			return fmt.Errorf("failed to update event in database: %w", err)
-		}
+		e.logger.Info("Event already exists in database: %v, skipping", eventId)
 		return nil
-	} else {
-		// Insert into Supabase
-		_, _, err = e.db.From("events").Insert(ToEventIngestionInsert(database.PublicEventsInsert{
+	}
+	// Insert into Supabase
+	data, _, err = e.db.From("events").
+		Insert(ToEventIngestionInsert(database.PublicEventsInsert{
 			ContractAddress: eventData.ContractAddress,
 			EventName:       eventData.EventName,
 			BlockNumber:     eventData.BlockNumber,
@@ -90,12 +81,25 @@ func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event) error 
 			LogIndex:        eventData.LogIndex,
 			RawData:         eventData.RawData,
 			// TODO: pass block hash
-		}), false, "", "", "").Execute()
-		if err != nil {
-			return fmt.Errorf("failed to insert event into database: %w", err)
-		}
-		return nil
+		}), false, "", "", "").
+		Execute()
+
+	if err != nil {
+		return fmt.Errorf("failed to insert event into database: %w", err)
 	}
+	var insertResponse []struct {
+		Id string `json:"id"`
+	}
+	if err := json.Unmarshal(data, &insertResponse); err != nil {
+		return fmt.Errorf("failed to unmarshal insert response: %w", err)
+	}
+	if len(insertResponse) > 0 {
+		id := insertResponse[0].Id
+		e.logger.Info("Successfully inserted event: %v", id)
+		e.logger.Debug("Inserted data for %v: %v", id, eventData)
+	}
+	return nil
+
 }
 
 func parseEvent(vLog types.Log, event abi.Event) (*EventIngestionInsert, error) {

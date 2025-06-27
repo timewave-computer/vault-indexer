@@ -45,8 +45,6 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	indexerLogger := logger.NewLogger("Indexer")
 
-	indexerLogger.Info("Starting indexer...")
-
 	ethClient, err := ethclient.Dial(cfg.Ethereum.WebsocketURL)
 	indexerLogger.Info("Dialed to Ethereum websocket")
 	if err != nil {
@@ -97,7 +95,7 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 }
 
 func (i *Indexer) Start() error {
-	i.logger.Info("Starting indexer...")
+	i.logger.Info("Indexer started")
 
 	if err := i.healthServer.Start(); err != nil {
 		return fmt.Errorf("failed to start health check server: %w", err)
@@ -113,7 +111,7 @@ func (i *Indexer) Start() error {
 	/*
 		1. Start subscription and writing events immediately
 	*/
-	i.logger.Info("Setting up subscriptions for %d contracts...", len(i.config.Contracts))
+	i.logger.Info("Creating subscriptions for %d contracts...", len(i.config.Contracts))
 
 	wg := sync.WaitGroup{}
 	err = i.setupSubscriptions(&wg)
@@ -121,26 +119,25 @@ func (i *Indexer) Start() error {
 	if err != nil {
 		return fmt.Errorf("failed to setup subscriptions: %w", err)
 	}
-
 	i.logger.Info("Subscriptions created")
-	i.logger.Info("Sorted queue length: %d", i.eventQueue.Len())
 
 	/*
 		2. Backfill missed events
 	*/
 
-	err = i.backfillEvents(currentBlock, &wg)
+	i.logger.Info("Loading historical events from block %d...", currentBlock)
+	err = i.loadHistoricalEvents(currentBlock, &wg)
 	wg.Wait()
 	if err != nil {
 		return fmt.Errorf("failed to backfill events: %w", err)
 	}
 
-	i.logger.Info("Backfill completed")
+	i.logger.Info("Loaded historical events into ingestion queue. Size: %d", i.eventQueue.Len())
 
 	/*
 		4. Start processor (process events from sorted queue)
 	*/
-	err = i.processEventQueue()
+	err = i.handleEventIngestion()
 	if err != nil {
 		return fmt.Errorf("event queue processor failure: %w", err)
 	}
@@ -238,16 +235,14 @@ func (i *Indexer) setupSubscriptions(wg *sync.WaitGroup) error {
 	return nil
 }
 
-func (i *Indexer) backfillEvents(_currentBlock uint64, wg *sync.WaitGroup) error {
-	i.logger.Info("Backfilling events from current block %d...", _currentBlock)
-
+func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup) error {
 	errors := make(chan error, len(i.config.Contracts)*10)
 
 	go func() {
 		for {
 			select {
 			case err := <-errors:
-				i.logger.Error("Backfill Error: %v", err)
+				i.logger.Error("Error fetching historical events: %v", err)
 				i.Stop()
 				return
 			case <-i.ctx.Done():
@@ -278,10 +273,10 @@ func (i *Indexer) backfillEvents(_currentBlock uint64, wg *sync.WaitGroup) error
 					// continue
 				}
 
-				i.logger.Info("Backfilling events for %s on contract %s", event, contractConfig.Address)
+				i.logger.Debug("Fetching historical events for %s on contract %s", event.Name, contractConfig.Address)
 				lastIndexedBlock, err := i.getLastIndexedBlock(contractAddress, event)
 				if err != nil {
-					errors <- fmt.Errorf("failed to get last indexed block: %w", err)
+					errors <- fmt.Errorf("failed to get last indexed block: %w, event: %s, contract: %s", err, event.Name, contractConfig.Address)
 					return
 				}
 				if lastIndexedBlock == nil {
@@ -301,12 +296,12 @@ func (i *Indexer) backfillEvents(_currentBlock uint64, wg *sync.WaitGroup) error
 
 				logs, err := i.ethClient.FilterLogs(i.ctx, query)
 				if err != nil {
-					errors <- fmt.Errorf("failed to get logs: %w", err)
+					errors <- fmt.Errorf("failed to get historical events: %w, event: %s, contract: %s", err, event.Name, contractConfig.Address)
 					return
 				}
 
 				for _, vLog := range logs {
-					i.logger.Debug("Received backfill log: %v", vLog)
+					i.logger.Debug("Received historical event: %v", vLog)
 					eventLog := EventLog{
 						BlockNumber:     vLog.BlockNumber,
 						LogIndex:        vLog.Index,
@@ -319,12 +314,12 @@ func (i *Indexer) backfillEvents(_currentBlock uint64, wg *sync.WaitGroup) error
 			}(contractConfig, event)
 		}
 	}
-
-	i.logger.Info("Backfill completed")
 	return nil
 }
 
-func (i *Indexer) processEventQueue() error {
+func (i *Indexer) handleEventIngestion() error {
+	logger := logger.NewLogger("EventIngestionProcessor")
+	logger.Info("Event ingestion processor started")
 
 	errors := make(chan error, len(i.config.Contracts)*10)
 
@@ -344,21 +339,29 @@ func (i *Indexer) processEventQueue() error {
 
 	go func() {
 		for {
-			i.logger.Info("Processing event queue..., length: %d", i.eventQueue.Len())
+			select {
+			case <-i.ctx.Done():
+				// context cancelled, stop listening for errors
+				return
+			default:
+				// continue
+			}
+
 			event := i.eventQueue.Next()
 
 			if event == nil {
-				i.logger.Info("No events in queue, sleeping for 10 seconds")
-				time.Sleep(10 * time.Second)
+				logger.Info("No events in ingestion queue, waiting 15 seconds")
+				time.Sleep(15 * time.Second)
 				continue
 			}
+			logger.Info("Ingestion queue size: %d", i.eventQueue.Len())
 			currentBlock, err := i.ethClient.BlockNumber(i.ctx)
 			if err != nil {
 				errors <- fmt.Errorf("failed to get current block number: %w", err)
 			}
 			if event.BlockNumber >= currentBlock+i.requiredConfirmations {
 				// not enough confirmations, put back in queue
-				i.logger.Info("Not enough confirmations, putting back in queue: %v", event)
+				logger.Info("Not enough confirmations, putting back in queue. Event name: %s, block %d, current block %d, required height for ingestion: %d", event.Event.Name, event.BlockNumber, currentBlock, currentBlock+i.requiredConfirmations)
 				i.eventQueue.Insert(*event)
 				time.Sleep(10 * time.Second)
 				continue
