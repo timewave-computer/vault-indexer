@@ -217,7 +217,7 @@ func (t *Transformer) processBatch(events []database.PublicEventsSelect) error {
 			return err
 		}
 
-		t.logger.Info("Successfully committed transformation for event: %v", event.Id)
+		t.logger.Info("Transformed event: %v", event.Id)
 	}
 
 	return nil // Success

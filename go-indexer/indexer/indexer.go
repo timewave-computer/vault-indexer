@@ -384,8 +384,6 @@ func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Eve
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 		Topics:    [][]common.Hash{{event.ID}},
-		FromBlock: big.NewInt(int64(22694852)),
-		ToBlock:   big.NewInt(int64(22783028)),
 	}
 
 	logs := make(chan types.Log)

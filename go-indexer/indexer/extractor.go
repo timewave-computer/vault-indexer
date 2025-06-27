@@ -68,7 +68,7 @@ func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event) error 
 
 	if len(response) > 0 {
 		eventId := response[0].Id
-		e.logger.Info("Event already exists in database: %v, skipping", eventId)
+		e.logger.Info("Event exists in database, not inserting: %v", eventId)
 		return nil
 	}
 	// Insert into Supabase
@@ -95,7 +95,7 @@ func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event) error 
 	}
 	if len(insertResponse) > 0 {
 		id := insertResponse[0].Id
-		e.logger.Info("Successfully inserted event: %v", id)
+		e.logger.Info("Inserted event: %v", id)
 		e.logger.Debug("Inserted data for %v: %v", id, eventData)
 	}
 	return nil

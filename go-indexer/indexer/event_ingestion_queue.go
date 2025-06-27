@@ -23,6 +23,7 @@ type EventLog struct {
 	ContractAddress common.Address
 }
 
+// sort by block number, then log index
 func (e EventLog) Less(other EventLog) bool {
 	if e.BlockNumber == other.BlockNumber {
 		return e.LogIndex < other.LogIndex
