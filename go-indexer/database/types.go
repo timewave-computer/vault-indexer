@@ -1,45 +1,42 @@
 package database
 
 type PublicEventsSelect struct {
-  BlockNumber       int64       `json:"block_number"`
-  ContractAddress   string      `json:"contract_address"`
-  CreatedAt         *string     `json:"created_at"`
-  EventName         string      `json:"event_name"`
-  Id                string      `json:"id"`
-  IsPendingBackfill *bool       `json:"is_pending_backfill"`
-  IsProcessed       *bool       `json:"is_processed"`
-  LastUpdatedAt     *string     `json:"last_updated_at"`
-  LogIndex          int32       `json:"log_index"`
-  RawData           interface{} `json:"raw_data"`
-  TransactionHash   string      `json:"transaction_hash"`
+  BlockNumber     int64       `json:"block_number"`
+  ContractAddress string      `json:"contract_address"`
+  CreatedAt       *string     `json:"created_at"`
+  EventName       string      `json:"event_name"`
+  Id              string      `json:"id"`
+  IsProcessed     *bool       `json:"is_processed"`
+  LastUpdatedAt   *string     `json:"last_updated_at"`
+  LogIndex        int32       `json:"log_index"`
+  RawData         interface{} `json:"raw_data"`
+  TransactionHash string      `json:"transaction_hash"`
 }
 
 type PublicEventsInsert struct {
-  BlockNumber       int64       `json:"block_number"`
-  ContractAddress   string      `json:"contract_address"`
-  CreatedAt         *string     `json:"created_at"`
-  EventName         string      `json:"event_name"`
-  Id                *string     `json:"id"`
-  IsPendingBackfill *bool       `json:"is_pending_backfill"`
-  IsProcessed       *bool       `json:"is_processed"`
-  LastUpdatedAt     *string     `json:"last_updated_at"`
-  LogIndex          int32       `json:"log_index"`
-  RawData           interface{} `json:"raw_data"`
-  TransactionHash   string      `json:"transaction_hash"`
+  BlockNumber     int64       `json:"block_number"`
+  ContractAddress string      `json:"contract_address"`
+  CreatedAt       *string     `json:"created_at"`
+  EventName       string      `json:"event_name"`
+  Id              *string     `json:"id"`
+  IsProcessed     *bool       `json:"is_processed"`
+  LastUpdatedAt   *string     `json:"last_updated_at"`
+  LogIndex        int32       `json:"log_index"`
+  RawData         interface{} `json:"raw_data"`
+  TransactionHash string      `json:"transaction_hash"`
 }
 
 type PublicEventsUpdate struct {
-  BlockNumber       *int64      `json:"block_number"`
-  ContractAddress   *string     `json:"contract_address"`
-  CreatedAt         *string     `json:"created_at"`
-  EventName         *string     `json:"event_name"`
-  Id                *string     `json:"id"`
-  IsPendingBackfill *bool       `json:"is_pending_backfill"`
-  IsProcessed       *bool       `json:"is_processed"`
-  LastUpdatedAt     *string     `json:"last_updated_at"`
-  LogIndex          *int32      `json:"log_index"`
-  RawData           interface{} `json:"raw_data"`
-  TransactionHash   *string     `json:"transaction_hash"`
+  BlockNumber     *int64      `json:"block_number"`
+  ContractAddress *string     `json:"contract_address"`
+  CreatedAt       *string     `json:"created_at"`
+  EventName       *string     `json:"event_name"`
+  Id              *string     `json:"id"`
+  IsProcessed     *bool       `json:"is_processed"`
+  LastUpdatedAt   *string     `json:"last_updated_at"`
+  LogIndex        *int32      `json:"log_index"`
+  RawData         interface{} `json:"raw_data"`
+  TransactionHash *string     `json:"transaction_hash"`
 }
 
 type PublicPositionsSelect struct {
