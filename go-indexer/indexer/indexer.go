@@ -431,6 +431,7 @@ func (i *Indexer) loadAbi(contract config.ContractConfig) (abi.ABI, error) {
 }
 
 func (i *Indexer) Stop() error {
+	i.once.Do(func() {
 	i.logger.Info("Stopping indexer...")
 	i.healthServer.SetStatus("unhealthy")
 
@@ -448,7 +449,7 @@ func (i *Indexer) Stop() error {
 	// finally release external resources
 	i.ethClient.Close()
 	i.postgresClient.Close()
-
+	})
 	return nil
 }
 
