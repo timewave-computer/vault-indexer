@@ -37,7 +37,7 @@ type Indexer struct {
 	transformer           *Transformer
 	logger                *logger.Logger
 	healthServer          *health.Server
-	sortedQueue           *EventQueue
+	eventQueue            *EventQueue
 	requiredConfirmations uint64
 }
 
@@ -91,7 +91,7 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 		transformer:           transformer,
 		logger:                indexerLogger,
 		healthServer:          healthServer,
-		sortedQueue:           NewEventQueue(),
+		eventQueue:            NewEventQueue(),
 		requiredConfirmations: 4,
 	}, nil
 }
@@ -114,29 +114,36 @@ func (i *Indexer) Start() error {
 		1. Start subscription and writing events immediately
 	*/
 	i.logger.Info("Setting up subscriptions for %d contracts...", len(i.config.Contracts))
-	err = i.setupSubscriptions() // blocking
+
+	wg := sync.WaitGroup{}
+	err = i.setupSubscriptions(&wg)
+	wg.Wait()
 	if err != nil {
 		return fmt.Errorf("failed to setup subscriptions: %w", err)
 	}
 
 	i.logger.Info("Subscriptions created")
-	i.logger.Info("Sorted queue length: %d", i.sortedQueue.Len())
+	i.logger.Info("Sorted queue length: %d", i.eventQueue.Len())
 
 	/*
-		2. Backfill with idempotency [lastProcessedBlock,currentBlock]
+		2. Backfill missed events
 	*/
-	err = i.backfillEvents(currentBlock)
+
+	err = i.backfillEvents(currentBlock, &wg)
+	wg.Wait()
 	if err != nil {
 		return fmt.Errorf("failed to backfill events: %w", err)
 	}
 
 	i.logger.Info("Backfill completed")
 
-	i.sortedQueue.Print()
-
 	/*
 		4. Start processor (process events from sorted queue)
 	*/
+	err = i.processEventQueue()
+	if err != nil {
+		return fmt.Errorf("event queue processor failure: %w", err)
+	}
 
 	/*
 		5. Start transformer (process events saved in database)
@@ -158,8 +165,8 @@ func (i *Indexer) Start() error {
 	return nil
 }
 
-func (i *Indexer) setupSubscriptions() error {
-	wg := sync.WaitGroup{}
+func (i *Indexer) setupSubscriptions(wg *sync.WaitGroup) error {
+
 	errors := make(chan error, len(i.config.Contracts)*10)
 
 	// listen for errors from subscription go routines
@@ -228,16 +235,13 @@ func (i *Indexer) setupSubscriptions() error {
 		}
 	}
 
-	wg.Wait()
-
 	return nil
 }
 
-func (i *Indexer) backfillEvents(_currentBlock uint64) error {
+func (i *Indexer) backfillEvents(_currentBlock uint64, wg *sync.WaitGroup) error {
 	i.logger.Info("Backfilling events from current block %d...", _currentBlock)
 
 	errors := make(chan error, len(i.config.Contracts)*10)
-	wg := sync.WaitGroup{}
 
 	go func() {
 		for {
@@ -310,15 +314,64 @@ func (i *Indexer) backfillEvents(_currentBlock uint64) error {
 						Data:            vLog,
 						ContractAddress: contractAddress,
 					}
-					i.sortedQueue.Insert(eventLog)
+					i.eventQueue.Insert(eventLog)
 				}
 			}(contractConfig, event)
 		}
 	}
 
-	wg.Wait()
-
 	i.logger.Info("Backfill completed")
+	return nil
+}
+
+func (i *Indexer) processEventQueue() error {
+
+	errors := make(chan error, len(i.config.Contracts)*10)
+
+	go func() {
+		for {
+			select {
+			case err := <-errors:
+				i.logger.Error("Error in event queue processor: %v", err)
+				i.Stop()
+				return
+			case <-i.ctx.Done():
+				// context cancelled, stop listening for errors
+				return
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			i.logger.Info("Processing event queue..., length: %d", i.eventQueue.Len())
+			event := i.eventQueue.Next()
+
+			if event == nil {
+				i.logger.Info("No events in queue, sleeping for 10 seconds")
+				time.Sleep(10 * time.Second)
+				continue
+			}
+			currentBlock, err := i.ethClient.BlockNumber(i.ctx)
+			if err != nil {
+				errors <- fmt.Errorf("failed to get current block number: %w", err)
+			}
+			if event.BlockNumber >= currentBlock+i.requiredConfirmations {
+				// not enough confirmations, put back in queue
+				i.logger.Info("Not enough confirmations, putting back in queue: %v", event)
+				i.eventQueue.Insert(*event)
+				time.Sleep(10 * time.Second)
+				continue
+			}
+
+			err = i.extractor.writeIdempotentEvent(event.Data, event.Event)
+			if err != nil {
+				errors <- fmt.Errorf("failed to extract event %s, %v", err, event)
+			}
+
+		}
+	}()
+
 	return nil
 }
 
@@ -354,7 +407,7 @@ func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Eve
 				Data:            vLog,
 				ContractAddress: contractAddress,
 			}
-			i.sortedQueue.Insert(eventLog)
+			i.eventQueue.Insert(eventLog)
 			i.logger.Info("Event inserted into sorted queue: block %d, log index %d", vLog.BlockNumber, vLog.Index)
 		case <-i.ctx.Done():
 			sub.Unsubscribe()

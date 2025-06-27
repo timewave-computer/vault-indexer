@@ -71,14 +71,14 @@ func (q *EventQueue) Insert(event EventLog) {
 	heap.Push(q, event)
 }
 
-func (q *EventQueue) Next() (*EventLog, bool) {
+func (q *EventQueue) Next() *EventLog {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.Len() == 0 {
-		return nil, false
+		return nil
 	}
 	ev := heap.Pop(q).(EventLog)
-	return &ev, true
+	return &ev
 }
 
 // Print prints all the events in the queue in order.
