@@ -126,7 +126,7 @@ func (i *Indexer) Start() error {
 		2. Backfill missed events
 	*/
 
-	i.logger.Info("Loading historical events from block %d...", currentBlock)
+	i.logger.Info("Loading historical events, current block: %d", currentBlock)
 	err = i.loadHistoricalEvents(currentBlock, &wg)
 	wg.Wait()
 	if err != nil {
@@ -274,7 +274,6 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 					// continue
 				}
 
-				i.logger.Debug("Fetching historical events for %s on contract %s", event.Name, contractConfig.Address)
 				lastIndexedBlock, err := i.getLastIndexedBlock(contractAddress, event)
 				if err != nil {
 					errors <- fmt.Errorf("failed to get last indexed block: %w, event: %s, contract: %s", err, event.Name, contractConfig.Address)
@@ -287,6 +286,8 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 
 				fromBlock := big.NewInt(int64(*lastIndexedBlock))
 				toBlock := big.NewInt(int64(_currentBlock))
+
+				i.logger.Info("Fetching historical events for %s on contract %s, from block %d to block %d", event.Name, contractConfig.Address, *lastIndexedBlock, _currentBlock)
 
 				query := ethereum.FilterQuery{
 					Addresses: []common.Address{contractAddress},
@@ -355,11 +356,13 @@ func (i *Indexer) handleEventIngestion() error {
 				time.Sleep(15 * time.Second)
 				continue
 			}
-			logger.Info("Ingestion queue size: %d", i.eventQueue.Len())
 			currentBlock, err := i.ethClient.BlockNumber(i.ctx)
+
 			if err != nil {
 				errors <- fmt.Errorf("failed to get current block number: %w", err)
 			}
+			logger.Info("Ingestion queue size: %d, current block: %d", i.eventQueue.Len(), currentBlock)
+
 			if (event.BlockNumber + i.requiredConfirmations) > currentBlock {
 				// not enough confirmations, put back in queue
 				logger.Info("Not enough confirmations, putting back in queue and waiting 15 seconds. Event name: %s, block %d, current block %d, required height for ingestion: %d", event.Event.Name, event.BlockNumber, currentBlock, currentBlock+i.requiredConfirmations)
