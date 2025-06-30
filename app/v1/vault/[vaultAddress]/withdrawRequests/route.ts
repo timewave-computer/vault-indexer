@@ -33,7 +33,7 @@ export const { GET } = defineRoute({
       if (!isAddress(vaultAddress)) {
         throw new Error('Vault address is invalid ethereum address')
       }
-
+   
       const { from, limit, order } = queryParams
 
       const query = supabase.from('withdraw_requests').select(`

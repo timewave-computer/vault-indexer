@@ -71,7 +71,7 @@
               '';
               unitConfig = {
                 StartLimitBurst = 5;
-                StartLimitIntervalSec = "10m";
+                StartLimitIntervalSec = "1m";
               };
               serviceConfig = {
                 ExecStart = "${lib.getExe package} prod";
