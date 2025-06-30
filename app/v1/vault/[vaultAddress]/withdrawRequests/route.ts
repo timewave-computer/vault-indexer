@@ -37,7 +37,7 @@ export const { GET } = defineRoute({
         throw new Error('Vault address is invalid ethereum address')
       }
    
-      const {blockTag } = queryParams
+      const {from, limit, order ,blockTag } = queryParams
 
       const blockNumber = blockTag ? (await getMostRecentBlockNumber(blockTag)) : 0
 
@@ -47,11 +47,16 @@ export const { GET } = defineRoute({
         block_number,
         owner_address,
         receiver_address
-      `).eq('contract_address', vaultAddress)
+      `).eq('contract_address', vaultAddress).limit(Number(limit))
     
+      if (order === 'desc') {
+        query.order('withdraw_id', { ascending: false }).lte('withdraw_id', from)
+      } else {
+        query.order('withdraw_id', { ascending: true }).gte('withdraw_id', from)
+      }
 
 
-      if (queryParams.blockTag) {
+      if (blockTag) {
           query.lte('block_number', blockNumber)
       }
 

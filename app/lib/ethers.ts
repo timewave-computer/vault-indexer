@@ -5,8 +5,6 @@ if (!rpcUrl) {
   throw new Error('API_ETH_RPC_URL is not set');
 }
 
-console.log('RPC URL', rpcUrl)
-
 const getEthersProvider = () => {
   // Configure provider options to prevent retries
   const options: JsonRpcApiProviderOptions = {
@@ -21,13 +19,13 @@ const getEthersProvider = () => {
   }, options);
 }
 
+const ethersProvider = getEthersProvider()
+
 export const getMostRecentBlockNumber = async (
     blockTag?: BlockTag
 ): Promise<number> => {
 
-  const ethersProvider = getEthersProvider()
-
-  const block = await ethersProvider.getBlock(blockTag ?? "");
+  const block = await ethersProvider.getBlock(blockTag ?? "latest");
   if (!block) {
     throw new Error('Could not fetch finalized block');
   }
