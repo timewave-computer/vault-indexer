@@ -151,6 +151,12 @@ func (i *Indexer) Start() error {
 		return fmt.Errorf("failed to start transformer: %w", err)
 	}
 
+	// after 30 second sleep call stop
+	time.AfterFunc(10*time.Second, func() {
+		i.logger.Info("30 seconds passed, shutting down indexer...")
+		i.Stop()
+	})
+
 	go func() {
 		<-i.transformer.ctx.Done()
 		i.transformer.Stop()
@@ -453,6 +459,9 @@ func (i *Indexer) Stop() error {
 		// finally release external resources
 		i.ethClient.Close()
 		i.postgresClient.Close()
+
+		// tell the process manager the process exited in error
+		os.Exit(1)
 	})
 	return nil
 }
