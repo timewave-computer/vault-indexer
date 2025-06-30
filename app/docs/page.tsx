@@ -1,13 +1,12 @@
 import generateOpenApiSpec  from '@omer-x/next-openapi-json-generator'
-import { paginationSchema, timeRangeSchema } from '@/app/types'
+import { paginationSchema, timeRangeSchema } from '@/app/lib'
 import { ApiDocs } from '@/app/ui';
 
 export default async function DocsHome() {
 
     const _spec = await generateOpenApiSpec({
         paginationSchema,
-        timeRangeSchema
-      });
+        timeRangeSchema      });
       
       const spec = {
         pageTitle: 'Valence Indexer API',

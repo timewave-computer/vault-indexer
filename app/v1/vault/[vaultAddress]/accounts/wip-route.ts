@@ -1,6 +1,6 @@
 import { isAddress } from 'ethers'
-import { paginationSchema } from "@/app/types"
-import { sql } from '@/app/postgres'
+import { paginationSchema } from "@/app/lib"
+import { sql } from '@/app/lib'
 import defineRoute from "@omer-x/next-openapi-route-handler";
 import z from "zod";
 
