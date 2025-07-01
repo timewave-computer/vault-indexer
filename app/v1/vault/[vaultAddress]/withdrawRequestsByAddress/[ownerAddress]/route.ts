@@ -1,8 +1,7 @@
-import supabase from "@/app/supabase"
 import { isAddress } from 'ethers'
-import { paginationSchema } from "@/app/types"
 import defineRoute from "@omer-x/next-openapi-route-handler";
 import { z } from "zod";
+import { getMostRecentBlockNumber, supabase, paginationSchema } from "@/app/lib";
 
 const getWithdrawRequestsByAddressResponseSchema = z.object({
   data: z.array(z.object({
@@ -13,6 +12,7 @@ const getWithdrawRequestsByAddressResponseSchema = z.object({
     block_number: z.number(),
   })),
 })
+
 export const { GET } = defineRoute({
   method: "GET",
   operationId: "getWithdrawRequestsByAddress",
@@ -20,8 +20,8 @@ export const { GET } = defineRoute({
   summary: "Withdraw requests by address",
   description: "Fetches all withdraw requests for a vault by a specific address.",
   pathParams: z.object({
-    vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-    ownerAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+    vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('Ethereum address'),
+    ownerAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('Ethereum address'),
   }),
   queryParams: paginationSchema,
   action: async({pathParams, queryParams}) => {
@@ -35,7 +35,10 @@ export const { GET } = defineRoute({
         throw new Error('Owner address is invalid ethereum address')
       }
 
-      const { from, limit, order } = queryParams
+      const { from, limit, order, blockTag } = queryParams
+
+      const blockNumber = blockTag ? (await getMostRecentBlockNumber(blockTag)) : 0
+
 
       const query = supabase.from('withdraw_requests').select(`
         id:withdraw_id,
@@ -46,6 +49,10 @@ export const { GET } = defineRoute({
       `).eq('contract_address', vaultAddress)
         .eq('owner_address', ownerAddress)
         .limit(Number(limit))
+
+      if (queryParams.blockTag) {
+        query.lte('block_number', blockNumber)
+      }
 
       if (order === 'desc') {
         query.order('withdraw_id', { ascending: false }).lte('withdraw_id', from)

@@ -1,12 +1,14 @@
 
 
-import supabase from "@/app/supabase"
 import { isAddress } from 'ethers'
-import { paginationSchema } from "@/app/types"
 import defineRoute from "@omer-x/next-openapi-route-handler";
 import { z } from "zod";
+import { getMostRecentBlockNumber, supabase, paginationSchema } from "@/app/lib";
 
- const getWithdrawRequestsResponseSchema = z.object({
+
+
+
+const getWithdrawRequestsResponseSchema = z.object({
   data: z.array(z.object({
     id: z.string(),
     amount: z.string(),
@@ -16,6 +18,7 @@ import { z } from "zod";
   })),
 })
 
+
 export const { GET } = defineRoute({
   method: "GET",
   operationId: "getWithdrawRequests",
@@ -23,7 +26,7 @@ export const { GET } = defineRoute({
   summary: "All withdraw requests",
   description: "Fetches all withdraw requests for a vault. Withdraw requests are created when a user requests to withdraw their shares from the vault.",
   pathParams: z.object({
-    vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+    vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('Ethereum address'),
   }),
   queryParams: paginationSchema,
   action: async({pathParams, queryParams}) => {
@@ -34,7 +37,9 @@ export const { GET } = defineRoute({
         throw new Error('Vault address is invalid ethereum address')
       }
    
-      const { from, limit, order } = queryParams
+      const {from, limit, order ,blockTag } = queryParams
+
+      const blockNumber = blockTag ? (await getMostRecentBlockNumber(blockTag)) : 0
 
       const query = supabase.from('withdraw_requests').select(`
         id:withdraw_id,
@@ -42,14 +47,20 @@ export const { GET } = defineRoute({
         block_number,
         owner_address,
         receiver_address
-      `).eq('contract_address', vaultAddress)
-        .limit(Number(limit))
-
+      `).eq('contract_address', vaultAddress).limit(Number(limit))
+    
       if (order === 'desc') {
         query.order('withdraw_id', { ascending: false }).lte('withdraw_id', from)
       } else {
         query.order('withdraw_id', { ascending: true }).gte('withdraw_id', from)
       }
+
+
+      if (blockTag) {
+          query.lte('block_number', blockNumber)
+      }
+
+     
 
       const { data, error } = await query
 
@@ -78,4 +89,6 @@ export const { GET } = defineRoute({
   },
 
 })
+
+
 

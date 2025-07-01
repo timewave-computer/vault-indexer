@@ -1,8 +1,7 @@
-import supabase from "@/app/supabase"
 import { z } from 'zod'
 import { isAddress } from 'ethers'
-import { paginationSchema } from "@/app/types"
 import defineRoute from "@omer-x/next-openapi-route-handler";
+import { getMostRecentBlockNumber, supabase, paginationSchema } from "@/app/lib";
 
 const getPositionsQuerySchema = paginationSchema.extend({
   owner_address: z.string().optional(),
@@ -28,7 +27,7 @@ export const { GET } = defineRoute({
   summary: "Positions",
   description: "Get all positions for a vault. Position amounts and start heights are immutable. When a balance changes, a new position is created at block height B, and the old position is closed at block height B-1. If the balance changes to 0, the position will be marked as terminated.",
   pathParams: z.object({
-    vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+    vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('Ethereum address'),
   }),
   queryParams: getPositionsQuerySchema,
   action: async({pathParams, queryParams}) => {
@@ -40,11 +39,13 @@ export const { GET } = defineRoute({
         throw new Error('Vault address is invalid ethereum address')
       }
 
-      const { owner_address, from, limit, order } = queryParams
+      const { owner_address, from, limit, order, blockTag } = queryParams
 
       if (owner_address && !isAddress(owner_address)) {
         throw new Error('Invalid owner address')
       }
+
+      const blockNumber = blockTag ? (await getMostRecentBlockNumber(blockTag)) : 0
 
       const query = supabase.from('positions').select(`
         id:position_index_id,
@@ -60,6 +61,12 @@ export const { GET } = defineRoute({
     if (owner_address) {
       query.eq('owner_address', owner_address)
     }
+
+    if (blockTag && blockNumber > 0) {
+      query.lte('position_start_height', blockNumber)
+    }
+
+
     if (order === 'desc') {
       query.order('position_index_id', { ascending: false }).lte('position_index_id', from)
     } else {

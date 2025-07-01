@@ -1,10 +1,9 @@
 
 
-import supabase from "@/app/supabase"
 import { isAddress } from 'ethers'
-import {  timeRangeSchema } from "@/app/types"
 import defineRoute from "@omer-x/next-openapi-route-handler";
 import { z } from "zod";
+import { getMostRecentBlockNumber, supabase , timeRangeSchema} from "@/app/lib";
 
  const getRatesResponseSchema = z.object({
   data: z.array(z.object({
@@ -13,6 +12,7 @@ import { z } from "zod";
     block_timestamp: z.string().describe('UTC timestamp of the block')
   })),
 })
+
 
 const MAX_RESULTS = 5000
 export const { GET } = defineRoute({
@@ -33,17 +33,23 @@ export const { GET } = defineRoute({
         throw new Error('Vault address is invalid ethereum address')
       }
 
-      const { from, to, order } = queryParams
+      const { from, to, order, blockTag } = queryParams
 
       if (new Date(from) > new Date(to)) {
         throw new Error("'from' must be earlier than 'to'")
       }
 
+      const blockNumber = blockTag ? (await getMostRecentBlockNumber(blockTag)) : 0
+  
       const query = supabase.from('rate_updates').select(`
         rate,
         block_number,
         block_timestamp
       `).eq('contract_address', vaultAddress).limit(MAX_RESULTS)
+
+      if (queryParams.blockTag) {
+        query.lte('block_number', blockNumber)
+      }
 
      query.order('block_number', { ascending: order === 'asc' }).gte('block_timestamp', from).lte('block_timestamp', to)
    

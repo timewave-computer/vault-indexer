@@ -10,6 +10,6 @@ if (!supabaseAnonKey) {
     throw new Error('API_SUPABASE_ANON_KEY is not set')
 }
 
-const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
 
-export default supabase
+
