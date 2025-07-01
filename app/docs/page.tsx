@@ -6,7 +6,8 @@ export default async function DocsHome() {
 
     const _spec = await generateOpenApiSpec({
         paginationSchema,
-        timeRangeSchema      });
+        timeRangeSchema,
+           });
       
       const spec = {
         pageTitle: 'Valence Indexer API',

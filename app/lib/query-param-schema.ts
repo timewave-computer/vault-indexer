@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-export const ethereumAddressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('Ethereum address')
 const orderSchema = z.enum(['asc', 'desc']).optional().default('asc').describe('Return results in ascending or descending order')
  const blockTagSchema = z.enum(['finalized', 'safe', 'latest']).optional().describe('Ethereum block tag with which to filter results. If not specified, the most recent events will be returned.')
 
