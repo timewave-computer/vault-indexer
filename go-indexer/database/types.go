@@ -1,6 +1,7 @@
 package database
 
 type PublicEventsSelect struct {
+  BlockHash       string      `json:"block_hash"`
   BlockNumber     int64       `json:"block_number"`
   ContractAddress string      `json:"contract_address"`
   CreatedAt       *string     `json:"created_at"`
@@ -14,6 +15,7 @@ type PublicEventsSelect struct {
 }
 
 type PublicEventsInsert struct {
+  BlockHash       string      `json:"block_hash"`
   BlockNumber     int64       `json:"block_number"`
   ContractAddress string      `json:"contract_address"`
   CreatedAt       *string     `json:"created_at"`
@@ -27,6 +29,7 @@ type PublicEventsInsert struct {
 }
 
 type PublicEventsUpdate struct {
+  BlockHash       *string     `json:"block_hash"`
   BlockNumber     *int64      `json:"block_number"`
   ContractAddress *string     `json:"contract_address"`
   CreatedAt       *string     `json:"created_at"`

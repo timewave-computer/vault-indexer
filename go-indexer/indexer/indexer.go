@@ -8,7 +8,6 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -18,7 +17,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/params"
 	"github.com/supabase-community/postgrest-go"
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/config"
@@ -81,8 +79,6 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	// Create health check server
 	healthServer := health.NewServer(8080, "event_ingestion") // Default port for indexer health checks
 
-	fmt.Println("Go version:", runtime.Version())
-	fmt.Println("Go Ethereum version:", params.Version)
 	return &Indexer{
 		config:                cfg,
 		postgresClient:        postgresClient,
@@ -314,6 +310,7 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 						Event:           event,
 						Data:            vLog,
 						ContractAddress: contractAddress,
+						BlockHash:       vLog.BlockHash,
 					}
 					i.eventQueue.Insert(eventLog)
 				}
@@ -360,14 +357,7 @@ func (i *Indexer) StartEventIngestionProcessor() error {
 				time.Sleep(15 * time.Second)
 				continue
 			}
-			eventBlockNumber := new(big.Int).SetUint64(event.BlockNumber)
-			header, err := i.ethClient.HeaderByNumber(i.ctx, eventBlockNumber)
-			if err != nil {
-				errors <- fmt.Errorf("failed to get block by number: %w", err)
-				continue
-			}
-			parentHash := header.ParentHash
-			logger.Info("Block: %v, parent hash: %s", eventBlockNumber, parentHash.String())
+			logger.Info("Processing event: %v", event.BlockHash)
 
 			currentBlock, err := i.ethClient.BlockNumber(i.ctx)
 
@@ -424,6 +414,7 @@ func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Eve
 				Event:           event,
 				Data:            vLog,
 				ContractAddress: contractAddress,
+				BlockHash:       vLog.BlockHash,
 			}
 			i.eventQueue.Insert(eventLog)
 			i.logger.Info("Event inserted into sorted queue: block %d, log index %d", vLog.BlockNumber, vLog.Index)
