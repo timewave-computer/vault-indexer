@@ -491,13 +491,3 @@ func (i *Indexer) getLastIndexedBlock(contractAddress common.Address, event abi.
 
 	return &lastIndexedEvent.BlockNumber, nil
 }
-func (i *Indexer) checkParentHash(blockNumber uint64) (*int64, error) {
-	header, err := i.ethClient.HeaderByNumber(i.ctx, big.NewInt(int64(blockNumber)))
-	if err != nil {
-		return nil, err
-	}
-	parentHash := header.ParentHash
-	i.logger.Info("Block: %v, parent hash: %s", blockNumber, parentHash.String())
-
-	return nil, nil
-}

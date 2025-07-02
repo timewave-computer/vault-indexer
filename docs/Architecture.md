@@ -38,13 +38,6 @@ if eventQueue has events:
 	CB = eth.getBlock()
 	event = queue.pop()
 	
-	if !(isParentHashConsistent(event.blockNumber)){
-		// there is a reorg
-		// trace back to last consistent block number
-		// delete all events and indeces after block number
-		// kill process, autorestarts, backfill
-	}
-	
 	if (event.block <= CB - N){
 		writeEvent()
 	} else {
@@ -53,23 +46,9 @@ if eventQueue has events:
 	} 
 ```
 
-### Detecting Block Reorgs
-Block reorgs can be checked by confirming the parentHash of the event matches what is recorded in the DB.
 
-If the values do no match, it is safe to pause the processing, delete all blocks written after the inconsistent block, restart the server, and reprocess.
-```go
- isParentHashConsistent(blockNumber){
-	 parentBlockHash = eth.getBlock(blockNumber).parentHash
-	 
-	 // check the parentHash of block
-	 prevBlockHash = db.fetchPreviousBlockHash()
-	 
-	 return parentBlockHAsh == prevBlockHash	 
- }
-```
-
-## Reorg Detector
-Every 60 mins
+## Detecting re-orgs
+Every 30 mins
 ```go
 fetch last finalized block from ethereum
 
