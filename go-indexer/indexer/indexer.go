@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/supabase-community/postgrest-go"
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/config"
@@ -79,6 +81,8 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	// Create health check server
 	healthServer := health.NewServer(8080, "event_ingestion") // Default port for indexer health checks
 
+	fmt.Println("Go version:", runtime.Version())
+	fmt.Println("Go Ethereum version:", params.Version)
 	return &Indexer{
 		config:                cfg,
 		postgresClient:        postgresClient,
@@ -138,7 +142,7 @@ func (i *Indexer) Start() error {
 	/*
 		4. Start processor (process events from sorted queue)
 	*/
-	err = i.handleEventIngestion()
+	err = i.StartEventIngestionProcessor()
 	if err != nil {
 		return fmt.Errorf("event queue processor failure: %w", err)
 	}
@@ -319,8 +323,8 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 	return nil
 }
 
-func (i *Indexer) handleEventIngestion() error {
-	logger := logger.NewLogger("EventIngestionProcessor")
+func (i *Indexer) StartEventIngestionProcessor() error {
+	logger := logger.NewLogger("EventIngestion")
 	logger.Info("Event ingestion processor started")
 
 	errors := make(chan error, len(i.config.Contracts)*10)
@@ -356,6 +360,15 @@ func (i *Indexer) handleEventIngestion() error {
 				time.Sleep(15 * time.Second)
 				continue
 			}
+			eventBlockNumber := new(big.Int).SetUint64(event.BlockNumber)
+			header, err := i.ethClient.HeaderByNumber(i.ctx, eventBlockNumber)
+			if err != nil {
+				errors <- fmt.Errorf("failed to get block by number: %w", err)
+				continue
+			}
+			parentHash := header.ParentHash
+			logger.Info("Block: %v, parent hash: %s", eventBlockNumber, parentHash.String())
+
 			currentBlock, err := i.ethClient.BlockNumber(i.ctx)
 
 			if err != nil {
@@ -486,4 +499,14 @@ func (i *Indexer) getLastIndexedBlock(contractAddress common.Address, event abi.
 	lastIndexedEvent := indexedEvents[0]
 
 	return &lastIndexedEvent.BlockNumber, nil
+}
+func (i *Indexer) checkParentHash(blockNumber uint64) (*int64, error) {
+	header, err := i.ethClient.HeaderByNumber(i.ctx, big.NewInt(int64(blockNumber)))
+	if err != nil {
+		return nil, err
+	}
+	parentHash := header.ParentHash
+	i.logger.Info("Block: %v, parent hash: %s", blockNumber, parentHash.String())
+
+	return nil, nil
 }
