@@ -21,6 +21,7 @@ type EventLog struct {
 	Event           abi.Event
 	Data            types.Log
 	ContractAddress common.Address
+	BlockHash       common.Hash
 }
 
 // sort by block number, then log index

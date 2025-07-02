@@ -138,7 +138,7 @@ func (i *Indexer) Start() error {
 	/*
 		4. Start processor (process events from sorted queue)
 	*/
-	err = i.handleEventIngestion()
+	err = i.StartEventIngestionProcessor()
 	if err != nil {
 		return fmt.Errorf("event queue processor failure: %w", err)
 	}
@@ -310,6 +310,7 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 						Event:           event,
 						Data:            vLog,
 						ContractAddress: contractAddress,
+						BlockHash:       vLog.BlockHash,
 					}
 					i.eventQueue.Insert(eventLog)
 				}
@@ -319,8 +320,8 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 	return nil
 }
 
-func (i *Indexer) handleEventIngestion() error {
-	logger := logger.NewLogger("EventIngestionProcessor")
+func (i *Indexer) StartEventIngestionProcessor() error {
+	logger := logger.NewLogger("EventIngestion")
 	logger.Info("Event ingestion processor started")
 
 	errors := make(chan error, len(i.config.Contracts)*10)
@@ -356,6 +357,8 @@ func (i *Indexer) handleEventIngestion() error {
 				time.Sleep(15 * time.Second)
 				continue
 			}
+			logger.Info("Processing event: %v", event.BlockHash)
+
 			currentBlock, err := i.ethClient.BlockNumber(i.ctx)
 
 			if err != nil {
@@ -411,6 +414,7 @@ func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Eve
 				Event:           event,
 				Data:            vLog,
 				ContractAddress: contractAddress,
+				BlockHash:       vLog.BlockHash,
 			}
 			i.eventQueue.Insert(eventLog)
 			i.logger.Info("Event inserted into sorted queue: block %d, log index %d", vLog.BlockNumber, vLog.Index)

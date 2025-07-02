@@ -80,7 +80,7 @@ func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event) error 
 			TransactionHash: eventData.TransactionHash,
 			LogIndex:        eventData.LogIndex,
 			RawData:         eventData.RawData,
-			// TODO: pass block hash
+			BlockHash:       eventData.BlockHash,
 		}), false, "", "", "").
 		Execute()
 
@@ -158,6 +158,7 @@ func parseEvent(vLog types.Log, event abi.Event) (*EventIngestionInsert, error) 
 		TransactionHash: vLog.TxHash.Hex(),
 		LogIndex:        int32(vLog.Index),
 		RawData:         eventJSON,
+		BlockHash:       vLog.BlockHash.Hex(),
 	})
 
 	return &eventRecord, nil
@@ -183,6 +184,7 @@ type EventIngestionInsert struct {
 	TransactionHash string      `json:"transaction_hash"`
 	LogIndex        int32       `json:"log_index"`
 	RawData         interface{} `json:"raw_data"`
+	BlockHash       string      `json:"block_hash"`
 }
 
 func ToEventIngestionInsert(u database.PublicEventsInsert) EventIngestionInsert {
@@ -194,5 +196,6 @@ func ToEventIngestionInsert(u database.PublicEventsInsert) EventIngestionInsert 
 		TransactionHash: u.TransactionHash,
 		LogIndex:        u.LogIndex,
 		RawData:         u.RawData,
+		BlockHash:       u.BlockHash,
 	}
 }
