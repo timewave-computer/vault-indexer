@@ -137,3 +137,21 @@ type PublicRateUpdatesUpdate struct {
   Id              *string `json:"id"`
   Rate            *string `json:"rate"`
 }
+
+type PublicBlockFinalitySelect struct {
+  Id                            string `json:"id"`
+  LastConfirmedFinalBlockNumber int64  `json:"last_confirmed_final_block_number"`
+  LastConfirmedSafeBlockNumber  int64  `json:"last_confirmed_safe_block_number"`
+}
+
+type PublicBlockFinalityInsert struct {
+  Id                            *string `json:"id"`
+  LastConfirmedFinalBlockNumber *int64  `json:"last_confirmed_final_block_number"`
+  LastConfirmedSafeBlockNumber  *int64  `json:"last_confirmed_safe_block_number"`
+}
+
+type PublicBlockFinalityUpdate struct {
+  Id                            *string `json:"id"`
+  LastConfirmedFinalBlockNumber *int64  `json:"last_confirmed_final_block_number"`
+  LastConfirmedSafeBlockNumber  *int64  `json:"last_confirmed_safe_block_number"`
+}

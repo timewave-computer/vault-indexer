@@ -34,8 +34,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      block_finality: {
+        Row: {
+          id: string
+          last_confirmed_final_block_number: number
+          last_confirmed_safe_block_number: number
+        }
+        Insert: {
+          id?: string
+          last_confirmed_final_block_number?: number
+          last_confirmed_safe_block_number?: number
+        }
+        Update: {
+          id?: string
+          last_confirmed_final_block_number?: number
+          last_confirmed_safe_block_number?: number
+        }
+        Relationships: []
+      }
       events: {
         Row: {
+          block_hash: string
           block_number: number
           contract_address: string
           created_at: string | null
@@ -48,6 +67,7 @@ export type Database = {
           transaction_hash: string
         }
         Insert: {
+          block_hash: string
           block_number: number
           contract_address: string
           created_at?: string | null
@@ -60,6 +80,7 @@ export type Database = {
           transaction_hash: string
         }
         Update: {
+          block_hash?: string
           block_number?: number
           contract_address?: string
           created_at?: string | null
@@ -79,7 +100,7 @@ export type Database = {
           contract_address: string
           created_at: string
           id: string
-          is_terminated: boolean | null
+          is_terminated: boolean
           owner_address: string
           position_end_height: number | null
           position_index_id: number
@@ -91,7 +112,7 @@ export type Database = {
           contract_address: string
           created_at?: string
           id?: string
-          is_terminated?: boolean | null
+          is_terminated?: boolean
           owner_address: string
           position_end_height?: number | null
           position_index_id: number
@@ -103,7 +124,7 @@ export type Database = {
           contract_address?: string
           created_at?: string
           id?: string
-          is_terminated?: boolean | null
+          is_terminated?: boolean
           owner_address?: string
           position_end_height?: number | null
           position_index_id?: number

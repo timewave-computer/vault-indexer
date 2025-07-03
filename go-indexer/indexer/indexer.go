@@ -39,6 +39,7 @@ type Indexer struct {
 	healthServer          *health.Server
 	eventQueue            *EventQueue
 	requiredConfirmations uint64
+	finalityChecker       *FinalityChecker
 	once                  sync.Once
 }
 
@@ -62,6 +63,8 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	indexerLogger.Info("Connected to supabase client")
 
 	extractor := NewExtractor(supabaseClient, ethClient)
+
+	finalityChecker := NewFinalityChecker(ethClient, supabaseClient)
 
 	postgresClient, err := sql.Open("postgres", cfg.Database.PostgresConnectionString)
 	if err != nil {
@@ -90,6 +93,7 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 		transformer:           transformer,
 		logger:                indexerLogger,
 		healthServer:          healthServer,
+		finalityChecker:       finalityChecker,
 		eventQueue:            NewEventQueue(),
 		requiredConfirmations: 4,
 	}, nil
@@ -100,6 +104,10 @@ func (i *Indexer) Start() error {
 
 	if err := i.healthServer.Start(); err != nil {
 		return fmt.Errorf("failed to start health check server: %w", err)
+	}
+
+	if err := i.finalityChecker.Start(); err != nil {
+		return fmt.Errorf("failed to start finality checker: %w", err)
 	}
 
 	currentBlock, err := i.ethClient.BlockNumber(i.ctx)
@@ -154,6 +162,11 @@ func (i *Indexer) Start() error {
 	go func() {
 		<-i.transformer.ctx.Done()
 		i.transformer.Stop()
+	}()
+
+	go func() {
+		<-i.finalityChecker.ctx.Done()
+		i.finalityChecker.Stop()
 	}()
 
 	// Wait for context cancellation
