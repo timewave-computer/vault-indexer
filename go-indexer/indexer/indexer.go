@@ -21,6 +21,7 @@ import (
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/config"
 	"github.com/timewave/vault-indexer/go-indexer/database"
+	event_queue "github.com/timewave/vault-indexer/go-indexer/event-ingestion-queue"
 	"github.com/timewave/vault-indexer/go-indexer/health"
 	"github.com/timewave/vault-indexer/go-indexer/logger"
 )
@@ -37,9 +38,9 @@ type Indexer struct {
 	transformer           *Transformer
 	logger                *logger.Logger
 	healthServer          *health.Server
-	eventQueue            *EventQueue
+	eventQueue            *event_queue.EventQueue
 	requiredConfirmations uint64
-	finalityChecker       *FinalityChecker
+	finalityProcessor     *FinalityProcessor
 	once                  sync.Once
 }
 
@@ -64,7 +65,7 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 
 	extractor := NewExtractor(supabaseClient, ethClient)
 
-	finalityChecker := NewFinalityChecker(ethClient, supabaseClient)
+	finalityProcessor := NewFinalityProcessor(ethClient, supabaseClient)
 
 	postgresClient, err := sql.Open("postgres", cfg.Database.PostgresConnectionString)
 	if err != nil {
@@ -93,8 +94,8 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 		transformer:           transformer,
 		logger:                indexerLogger,
 		healthServer:          healthServer,
-		finalityChecker:       finalityChecker,
-		eventQueue:            NewEventQueue(),
+		finalityProcessor:     finalityProcessor,
+		eventQueue:            event_queue.NewEventQueue(),
 		requiredConfirmations: 4,
 	}, nil
 }
@@ -106,8 +107,8 @@ func (i *Indexer) Start() error {
 		return fmt.Errorf("failed to start health check server: %w", err)
 	}
 
-	if err := i.finalityChecker.Start(); err != nil {
-		return fmt.Errorf("failed to start finality checker: %w", err)
+	if err := i.finalityProcessor.Start(); err != nil {
+		return fmt.Errorf("failed to start finality processor: %w", err)
 	}
 
 	currentBlock, err := i.ethClient.BlockNumber(i.ctx)
@@ -165,8 +166,8 @@ func (i *Indexer) Start() error {
 	}()
 
 	go func() {
-		<-i.finalityChecker.ctx.Done()
-		i.finalityChecker.Stop()
+		<-i.finalityProcessor.ctx.Done()
+		i.finalityProcessor.Stop()
 	}()
 
 	// Wait for context cancellation
@@ -317,7 +318,7 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 
 				for _, vLog := range logs {
 					i.logger.Debug("Received historical event: %v", vLog)
-					eventLog := EventLog{
+					eventLog := event_queue.EventLog{
 						BlockNumber:     vLog.BlockNumber,
 						LogIndex:        vLog.Index,
 						Event:           event,
@@ -421,7 +422,7 @@ func (i *Indexer) subscribeToEvent(contractAddress common.Address, event abi.Eve
 
 		case vLog := <-logs:
 			i.logger.Info("Received log: %v", vLog)
-			eventLog := EventLog{
+			eventLog := event_queue.EventLog{
 				BlockNumber:     vLog.BlockNumber,
 				LogIndex:        vLog.Index,
 				Event:           event,

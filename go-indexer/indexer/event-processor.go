@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/ethclient"
+	event_queue "github.com/timewave/vault-indexer/go-indexer/event-ingestion-queue"
 	"github.com/timewave/vault-indexer/go-indexer/health"
 	"github.com/timewave/vault-indexer/go-indexer/logger"
 )
 
 // EventProcessor handles processing of events from the event queue
 type EventProcessor struct {
-	eventQueue            *EventQueue
+	eventQueue            *event_queue.EventQueue
 	extractor             *Extractor
 	ethClient             *ethclient.Client
 	ctx                   context.Context
@@ -26,7 +27,7 @@ type EventProcessor struct {
 }
 
 // NewEventProcessor creates a new event processor instance
-func NewEventProcessor(eventQueue *EventQueue, extractor *Extractor, ethClient *ethclient.Client, requiredConfirmations uint64) *EventProcessor {
+func NewEventProcessor(eventQueue *event_queue.EventQueue, extractor *Extractor, ethClient *ethclient.Client, requiredConfirmations uint64) *EventProcessor {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Create health check server

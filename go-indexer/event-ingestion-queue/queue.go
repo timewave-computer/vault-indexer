@@ -1,4 +1,4 @@
-package indexer
+package event_ingestion_queue
 
 /*
 This is a sorted queue that is used to store events.

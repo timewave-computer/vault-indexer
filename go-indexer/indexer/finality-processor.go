@@ -13,7 +13,7 @@ import (
 	"github.com/timewave/vault-indexer/go-indexer/logger"
 )
 
-type FinalityChecker struct {
+type FinalityProcessor struct {
 	logger    *logger.Logger
 	ethClient *ethclient.Client
 	db        *supa.Client
@@ -23,11 +23,11 @@ type FinalityChecker struct {
 	wg        sync.WaitGroup
 }
 
-func NewFinalityChecker(ethClient *ethclient.Client, db *supa.Client) *FinalityChecker {
-	logger := logger.NewLogger("FinalityChecker")
+func NewFinalityProcessor(ethClient *ethclient.Client, db *supa.Client) *FinalityProcessor {
+	logger := logger.NewLogger("FinalityProcessor")
 	ctx, cancel := context.WithCancel(context.Background())
 
-	return &FinalityChecker{
+	return &FinalityProcessor{
 		logger:    logger,
 		ethClient: ethClient,
 		db:        db,
@@ -37,8 +37,8 @@ func NewFinalityChecker(ethClient *ethclient.Client, db *supa.Client) *FinalityC
 	}
 }
 
-func (f *FinalityChecker) Start() error {
-
+func (f *FinalityProcessor) Start() error {
+	f.logger.Info("Starting finality processor...")
 	errors := make(chan error, 10)
 
 	f.wg.Add(1)
@@ -47,7 +47,7 @@ func (f *FinalityChecker) Start() error {
 		for {
 			select {
 			case err := <-errors:
-				f.logger.Error("Error in finality checker: %v", err)
+				f.logger.Error("Error in finality processor: %v", err)
 				f.Stop()
 				return
 			case <-f.ctx.Done():
@@ -66,8 +66,6 @@ func (f *FinalityChecker) Start() error {
 				return
 			default:
 
-				f.logger.Info("Checking finality")
-				// Get the safe block (use SafeBlockNumber, not FinalizedBlockNumber)
 				canonicalSafeBlock, err := f.ethClient.HeaderByNumber(context.Background(), big.NewInt(int64(rpc.SafeBlockNumber)))
 				if err != nil {
 					f.logger.Error("Error getting last safe block: %v", err)
@@ -83,7 +81,6 @@ func (f *FinalityChecker) Start() error {
 					return
 				}
 
-				// Use the blocks for your logic
 				f.logger.Info("Safe block number: %d", canonicalSafeBlock.Number)
 				f.logger.Info("Finalized block number: %d", canonicalFinalizedBlock.Number)
 
@@ -109,9 +106,9 @@ func (f *FinalityChecker) Start() error {
 	return nil
 }
 
-func (f *FinalityChecker) Stop() {
+func (f *FinalityProcessor) Stop() {
 	f.once.Do(func() {
-		f.logger.Info("Stopping finality checker...")
+		f.logger.Info("Stopping finality processor...")
 		f.cancel()
 	})
 }
