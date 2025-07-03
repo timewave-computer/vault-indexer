@@ -38,3 +38,21 @@ contracts:
         - "Transfer"
         - "WithdrawRequested"
         - "RateUpdated"
+    - name: "LBTC Test2"
+      address: "0x9fe5b9c7ddbd26d0dc93634e15eb1a5d34c85493"
+      start_block: 22837541
+      abi_path: "vault.abi.json"
+      events:
+        - "Deposit"
+        - "Transfer"
+        - "WithdrawRequested"
+        - "RateUpdated"
+    - name: "USDC Test1"
+      address: "0x58e3e5eeae41c4ab8f954189dc9daef8ac7a17f9"
+      start_block: 22837730
+      abi_path: "vault.abi.json"
+      events:
+        - "Deposit"
+        - "Transfer"
+        - "WithdrawRequested"
+        - "RateUpdated"
