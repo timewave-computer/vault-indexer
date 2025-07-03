@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS block_finality (
     block_tag TEXT PRIMARY KEY,
-    last_confirmed_block_number BIGINT NOT NULL DEFAULT 0,
+    last_validated_block_number BIGINT NOT NULL
 );
 
 ALTER TABLE block_finality ENABLE ROW LEVEL SECURITY;

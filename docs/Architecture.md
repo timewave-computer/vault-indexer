@@ -10,6 +10,9 @@
 - can handle reorg
 - can be fetched on a consistency interval: finalized / unfinalized
 
+## Process architecture
+![alt text](./indexer-flow-chart.svg)
+
 ## Resilient and Lossless Event Ingestion Architecutre
 Note: the server has external configuration that will initiate a restart if it goes down. Any errors should stop the process so the server can restart and resume backfilling from last written rows.
 

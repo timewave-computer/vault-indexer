@@ -306,7 +306,6 @@ func (t *Transformer) Stop() {
 			t.pgdb.Close()
 		}
 	})
-
 }
 
 func (t *Transformer) insertToTable(tx *sql.Tx, table string, data any) error {

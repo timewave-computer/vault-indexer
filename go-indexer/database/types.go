@@ -139,19 +139,16 @@ type PublicRateUpdatesUpdate struct {
 }
 
 type PublicBlockFinalitySelect struct {
-  Id                            string `json:"id"`
-  LastConfirmedFinalBlockNumber int64  `json:"last_confirmed_final_block_number"`
-  LastConfirmedSafeBlockNumber  int64  `json:"last_confirmed_safe_block_number"`
+  BlockTag                 string `json:"block_tag"`
+  LastValidatedBlockNumber int64  `json:"last_validated_block_number"`
 }
 
 type PublicBlockFinalityInsert struct {
-  Id                            *string `json:"id"`
-  LastConfirmedFinalBlockNumber *int64  `json:"last_confirmed_final_block_number"`
-  LastConfirmedSafeBlockNumber  *int64  `json:"last_confirmed_safe_block_number"`
+  BlockTag                 string `json:"block_tag"`
+  LastValidatedBlockNumber int64  `json:"last_validated_block_number"`
 }
 
 type PublicBlockFinalityUpdate struct {
-  Id                            *string `json:"id"`
-  LastConfirmedFinalBlockNumber *int64  `json:"last_confirmed_final_block_number"`
-  LastConfirmedSafeBlockNumber  *int64  `json:"last_confirmed_safe_block_number"`
+  BlockTag                 *string `json:"block_tag"`
+  LastValidatedBlockNumber *int64  `json:"last_validated_block_number"`
 }

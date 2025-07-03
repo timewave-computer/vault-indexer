@@ -42,6 +42,10 @@ type Indexer struct {
 	requiredConfirmations uint64
 	finalityProcessor     *FinalityProcessor
 	once                  sync.Once
+	errorChan             chan error
+	stopChan              chan struct{}
+	processWg             sync.WaitGroup
+	eventProcessor        *EventProcessor
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
@@ -64,6 +68,10 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	indexerLogger.Info("Connected to supabase client")
 
 	extractor := NewExtractor(supabaseClient, ethClient)
+
+	eventQueue := event_queue.NewEventQueue()
+
+	eventProcessor := NewEventProcessor(eventQueue, extractor, ethClient, 4)
 
 	finalityProcessor := NewFinalityProcessor(ethClient, supabaseClient)
 
@@ -95,13 +103,20 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 		logger:                indexerLogger,
 		healthServer:          healthServer,
 		finalityProcessor:     finalityProcessor,
-		eventQueue:            event_queue.NewEventQueue(),
+		eventQueue:            eventQueue,
 		requiredConfirmations: 4,
+		errorChan:             make(chan error),
+		stopChan:              make(chan struct{}),
+		processWg:             sync.WaitGroup{},
+		eventProcessor:        eventProcessor,
 	}, nil
 }
 
 func (i *Indexer) Start() error {
 	i.logger.Info("Indexer started")
+
+	// Start centralized error handler
+	i.startErrorHandler()
 
 	if err := i.healthServer.Start(); err != nil {
 		return fmt.Errorf("failed to start health check server: %w", err)
@@ -125,7 +140,7 @@ func (i *Indexer) Start() error {
 
 	wg := sync.WaitGroup{}
 	err = i.setupSubscriptions(&wg)
-	wg.Wait()
+	wg.Wait() // do not progress until all subscriptions are created
 	if err != nil {
 		return fmt.Errorf("failed to setup subscriptions: %w", err)
 	}
@@ -137,7 +152,7 @@ func (i *Indexer) Start() error {
 
 	i.logger.Info("Loading historical events, current block: %d", currentBlock)
 	err = i.loadHistoricalEvents(currentBlock, &wg)
-	wg.Wait()
+	wg.Wait() // do not progress until all historical events are loaded
 	if err != nil {
 		return fmt.Errorf("failed to backfill events: %w", err)
 	}
@@ -147,7 +162,7 @@ func (i *Indexer) Start() error {
 	/*
 		4. Start processor (process events from sorted queue)
 	*/
-	err = i.StartEventIngestionProcessor()
+	err = i.eventProcessor.Start()
 	if err != nil {
 		return fmt.Errorf("event queue processor failure: %w", err)
 	}
@@ -160,41 +175,55 @@ func (i *Indexer) Start() error {
 		return fmt.Errorf("failed to start transformer: %w", err)
 	}
 
+	// Monitor child processes and stop indexer if any of them stop
+	i.processWg.Add(1)
 	go func() {
-		<-i.transformer.ctx.Done()
-		i.transformer.Stop()
+		defer i.processWg.Done()
+		select {
+		case <-i.eventProcessor.ctx.Done():
+			i.logger.Warn("Event processor context cancelled, stopping indexer")
+			i.errorChan <- fmt.Errorf("event processor stopped")
+		case <-i.stopChan:
+			return
+		}
 	}()
 
+	i.processWg.Add(1)
 	go func() {
-		<-i.finalityProcessor.ctx.Done()
-		i.finalityProcessor.Stop()
+		defer i.processWg.Done()
+		select {
+		case <-i.transformer.ctx.Done():
+			i.logger.Warn("Transformer context cancelled, stopping indexer")
+			i.errorChan <- fmt.Errorf("transformer stopped")
+		case <-i.stopChan:
+			return
+		}
 	}()
 
-	// Wait for context cancellation
-	<-i.ctx.Done()
-	i.logger.Info("Context cancelled, shutting down indexer...")
+	i.processWg.Add(1)
+	go func() {
+		defer i.processWg.Done()
+		select {
+		case <-i.finalityProcessor.ctx.Done():
+			i.logger.Warn("Finality processor context cancelled, stopping indexer")
+			i.errorChan <- fmt.Errorf("finality processor stopped")
+		case <-i.stopChan:
+			return
+		}
+	}()
+
+	// Wait for context cancellation or stop signal
+	select {
+	case <-i.ctx.Done():
+		i.logger.Info("Context cancelled, shutting down indexer...")
+	case <-i.stopChan:
+		i.logger.Info("Stop signal received, shutting down indexer...")
+	}
 
 	return nil
 }
 
 func (i *Indexer) setupSubscriptions(wg *sync.WaitGroup) error {
-
-	errors := make(chan error, len(i.config.Contracts)*10)
-
-	// listen for errors from subscription go routines
-	go func() {
-		for {
-			select {
-			case err := <-errors:
-				i.logger.Error("Error: %v", err)
-				i.Stop()
-				return
-			case <-i.ctx.Done():
-				// context cancelled, stop listening for errors
-				return
-			}
-		}
-	}()
 
 	for _, contract := range i.config.Contracts {
 		parsedABI, err := i.loadAbi(contract)
@@ -224,13 +253,12 @@ func (i *Indexer) setupSubscriptions(wg *sync.WaitGroup) error {
 					err := i.subscribeToEvent(contractAddress, event)
 
 					if err != nil {
-						// Use non-blocking send to avoid panic if channel is closed
+						// Use centralized error channel
 						select {
-						case errors <- fmt.Errorf("failed to subscribe to event %s for contract %s: %w", event.Name, contract.Address, err):
+						case i.errorChan <- fmt.Errorf("failed to subscribe to event %s for contract %s: %w", event.Name, contract.Address, err):
 						default:
 							// Channel is closed or full, ignore
 						}
-						i.Stop()
 						return
 					}
 
@@ -251,21 +279,6 @@ func (i *Indexer) setupSubscriptions(wg *sync.WaitGroup) error {
 }
 
 func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup) error {
-	errors := make(chan error, len(i.config.Contracts)*10)
-
-	go func() {
-		for {
-			select {
-			case err := <-errors:
-				i.logger.Error("Error fetching historical events: %v", err)
-				i.Stop()
-				return
-			case <-i.ctx.Done():
-				// context cancelled, stop listening for errors
-				return
-			}
-		}
-	}()
 
 	for _, contractConfig := range i.config.Contracts {
 
@@ -290,7 +303,12 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 
 				lastIndexedBlock, err := i.getLastIndexedBlock(contractAddress, event)
 				if err != nil {
-					errors <- fmt.Errorf("failed to get last indexed block: %w, event: %s, contract: %s", err, event.Name, contractConfig.Address)
+					// Use centralized error channel
+					select {
+					case i.errorChan <- fmt.Errorf("failed to get last indexed block: %w, event: %s, contract: %s", err, event.Name, contractConfig.Address):
+					default:
+						// Channel is closed or full, ignore
+					}
 					return
 				}
 				if lastIndexedBlock == nil {
@@ -312,7 +330,12 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 
 				logs, err := i.ethClient.FilterLogs(i.ctx, query)
 				if err != nil {
-					errors <- fmt.Errorf("failed to get historical events: %w, event: %s, contract: %s", err, event.Name, contractConfig.Address)
+					// Use centralized error channel
+					select {
+					case i.errorChan <- fmt.Errorf("failed to get historical events: %w, event: %s, contract: %s", err, event.Name, contractConfig.Address):
+					default:
+						// Channel is closed or full, ignore
+					}
 					return
 				}
 
@@ -331,71 +354,6 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 			}(contractConfig, event)
 		}
 	}
-	return nil
-}
-
-func (i *Indexer) StartEventIngestionProcessor() error {
-	logger := logger.NewLogger("EventIngestion")
-	logger.Info("Event ingestion processor started")
-
-	errors := make(chan error, len(i.config.Contracts)*10)
-
-	go func() {
-		for {
-			select {
-			case err := <-errors:
-				i.logger.Error("Error in event queue processor: %v", err)
-				i.Stop()
-				return
-			case <-i.ctx.Done():
-				// context cancelled, stop listening for errors
-				return
-			}
-		}
-	}()
-
-	go func() {
-		for {
-			select {
-			case <-i.ctx.Done():
-				// context cancelled, stop listening for errors
-				return
-			default:
-				// continue
-			}
-
-			event := i.eventQueue.Next()
-
-			if event == nil {
-				logger.Info("No events in ingestion queue, waiting 15 seconds")
-				time.Sleep(15 * time.Second)
-				continue
-			}
-			logger.Info("Processing event: %v", event.BlockHash)
-
-			currentBlock, err := i.ethClient.BlockNumber(i.ctx)
-
-			if err != nil {
-				errors <- fmt.Errorf("failed to get current block number: %w", err)
-			}
-			logger.Info("Ingestion queue size: %d, current block: %d", i.eventQueue.Len(), currentBlock)
-
-			if (event.BlockNumber + i.requiredConfirmations) > currentBlock {
-				// not enough confirmations, put back in queue
-				logger.Info("Not enough confirmations, putting back in queue and waiting 15 seconds. Event name: %s, block %d, current block %d, required height for ingestion: %d", event.Event.Name, event.BlockNumber, currentBlock, currentBlock+i.requiredConfirmations)
-				i.eventQueue.Insert(*event)
-				time.Sleep(15 * time.Second)
-				continue
-			}
-
-			err = i.extractor.writeIdempotentEvent(event.Data, event.Event)
-			if err != nil {
-				errors <- fmt.Errorf("failed to extract event %s, %v", err, event)
-			}
-
-		}
-	}()
-
 	return nil
 }
 
@@ -462,17 +420,28 @@ func (i *Indexer) Stop() error {
 			i.logger.Error("Error stopping health check server: %v", err)
 		}
 
-		// signal writers to stop
+		// Signal all goroutines to stop
+		close(i.stopChan)
+
+		// Cancel context to stop all child processes
 		i.cancel()
 
+		// Stop child processes
 		i.extractor.Stop()
 		i.transformer.Stop()
+		i.finalityProcessor.Stop()
 
-		// finally release external resources
+		// Wait for all process monitoring goroutines to finish
+		i.processWg.Wait()
+
+		// Close error channel
+		close(i.errorChan)
+
+		// Finally release external resources
 		i.ethClient.Close()
 		i.postgresClient.Close()
 
-		// tell the process manager the process exited in error
+		// Tell the process manager the process exited in error
 		os.Exit(1)
 	})
 	return nil
@@ -504,4 +473,20 @@ func (i *Indexer) getLastIndexedBlock(contractAddress common.Address, event abi.
 	lastIndexedEvent := indexedEvents[0]
 
 	return &lastIndexedEvent.BlockNumber, nil
+}
+
+func (i *Indexer) startErrorHandler() {
+	go func() {
+		for {
+			select {
+			case err := <-i.errorChan:
+				i.logger.Error("Error: %v", err)
+				i.Stop()
+				return
+			case <-i.ctx.Done():
+				// context cancelled, stop listening for errors
+				return
+			}
+		}
+	}()
 }

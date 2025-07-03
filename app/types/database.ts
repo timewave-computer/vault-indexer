@@ -36,19 +36,16 @@ export type Database = {
     Tables: {
       block_finality: {
         Row: {
-          id: string
-          last_confirmed_final_block_number: number
-          last_confirmed_safe_block_number: number
+          block_tag: string
+          last_confirmed_block_number: number
         }
         Insert: {
-          id?: string
-          last_confirmed_final_block_number?: number
-          last_confirmed_safe_block_number?: number
+          block_tag: string
+          last_confirmed_block_number: number
         }
         Update: {
-          id?: string
-          last_confirmed_final_block_number?: number
-          last_confirmed_safe_block_number?: number
+          block_tag?: string
+          last_confirmed_block_number?: number
         }
         Relationships: []
       }
