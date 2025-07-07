@@ -34,8 +34,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      block_finality: {
+        Row: {
+          block_tag: string
+          last_confirmed_block_number: number
+        }
+        Insert: {
+          block_tag: string
+          last_confirmed_block_number: number
+        }
+        Update: {
+          block_tag?: string
+          last_confirmed_block_number?: number
+        }
+        Relationships: []
+      }
       events: {
         Row: {
+          block_hash: string
           block_number: number
           contract_address: string
           created_at: string | null
@@ -48,6 +64,7 @@ export type Database = {
           transaction_hash: string
         }
         Insert: {
+          block_hash: string
           block_number: number
           contract_address: string
           created_at?: string | null
@@ -60,6 +77,7 @@ export type Database = {
           transaction_hash: string
         }
         Update: {
+          block_hash?: string
           block_number?: number
           contract_address?: string
           created_at?: string | null
@@ -79,7 +97,7 @@ export type Database = {
           contract_address: string
           created_at: string
           id: string
-          is_terminated: boolean | null
+          is_terminated: boolean
           owner_address: string
           position_end_height: number | null
           position_index_id: number
@@ -91,7 +109,7 @@ export type Database = {
           contract_address: string
           created_at?: string
           id?: string
-          is_terminated?: boolean | null
+          is_terminated?: boolean
           owner_address: string
           position_end_height?: number | null
           position_index_id: number
@@ -103,7 +121,7 @@ export type Database = {
           contract_address?: string
           created_at?: string
           id?: string
-          is_terminated?: boolean | null
+          is_terminated?: boolean
           owner_address?: string
           position_end_height?: number | null
           position_index_id?: number

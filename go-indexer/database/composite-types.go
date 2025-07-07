@@ -36,3 +36,15 @@ func ToPositionInsert(u PublicPositionsInsert) PositionInsert {
 		WithdrawReceiverAddress: nil,
 	}
 }
+
+type BlockFinalityUpsert struct {
+	LastValidatedBlockNumber int64  `json:"last_validated_block_number"`
+	BlockTag                 string `json:"block_tag"`
+}
+
+func ToBlockFinalityUpsert(u PublicBlockFinalityUpdate) BlockFinalityUpsert {
+	return BlockFinalityUpsert{
+		LastValidatedBlockNumber: *u.LastValidatedBlockNumber,
+		BlockTag:                 *u.BlockTag,
+	}
+}

@@ -10,6 +10,9 @@
 - can handle reorg
 - can be fetched on a consistency interval: finalized / unfinalized
 
+## Process architecture
+![alt text](./indexer-flow-chart.svg)
+
 ## Resilient and Lossless Event Ingestion Architecutre
 Note: the server has external configuration that will initiate a restart if it goes down. Any errors should stop the process so the server can restart and resume backfilling from last written rows.
 
@@ -48,47 +51,6 @@ if eventQueue has events:
 
 
 ## Detecting re-orgs
-Every 30 mins
-```go
-fetch last finalized block from ethereum
+	
 
-in batches of 100
-  fetch events from [lastIndexed, current]
-  for each event {
-	isValidHash = event.blockHash == client.blockHash(eventBlockNum)
-  	if !isValidHash
-		// there is a reorg!
-		stop transformer
-		stop eventIngestion
-		err = handleReorg(blockNum)
-		if (err) {
-			log error "unable to rollback"
-		}
-		closeIndexer
-  }
-
-handleReorg(inconsistentBlockNum) {
-	lastConsensusBlock,err = findLastConsensus(inconsistentBlockNum)
-
-	err = rollbackFromBlock(lastConsensusBlock)
-
-	return err
-}
-
-findLastConsensus(inconsistentBlockNum){
-	for each event from inconsistentBlockNum (desc)
-		if event.blockHash = client.blockHash
-			return event.blockNum
-		else continue
-}
-
-rollbackFromBlock(lastConsistent){
-	 for all transformers, call transformer.cleanup
-
-	rates, withdraw requests: delete where blockNum > last
-	positions:
-		delete positions where startBlock > lastConsistent
-		update positions where endBlock > lastConsistent [set end block, withdraw details to nil]
-	// commit in transaction
-}
 ```
