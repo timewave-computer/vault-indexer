@@ -63,10 +63,10 @@ func NewHandler(supabaseClient *supa.Client, postgresClient *sql.DB, ethClient *
 }
 
 // HandleReorg performs the complete reorg cleanup process
-func (h *Handler) HandleReorg(reorgErr *ReorgError) error {
-	h.logger.Info("Starting reorg cleanup for block %d hash: %s", reorgErr.BlockNumber, reorgErr.BlockHash)
+func (h *Handler) HandleReorg(blockNumber int64, blockHash string) error {
+	h.logger.Info("Starting reorg cleanup for block %d hash: %s", blockNumber, blockHash)
 
-	fromBlock := reorgErr.BlockNumber
+	fromBlock := blockNumber
 
 	// Step 1: Find the last valid block
 	lastConsistentBlock, err := h.findLastConsistentBlock(fromBlock)

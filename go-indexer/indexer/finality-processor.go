@@ -15,7 +15,6 @@ import (
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/database"
 	"github.com/timewave/vault-indexer/go-indexer/logger"
-	"github.com/timewave/vault-indexer/go-indexer/reorg"
 )
 
 type FinalityProcessor struct {
@@ -23,36 +22,49 @@ type FinalityProcessor struct {
 	ethClient *ethclient.Client
 	db        *supa.Client
 	ctx       context.Context
-	cancel    context.CancelFunc
-	once      sync.Once
+	stopChan  chan StopChannel
 	wg        sync.WaitGroup
-	errors    chan error
 }
 
-func NewFinalityProcessor(ethClient *ethclient.Client, db *supa.Client, errorChan chan error) *FinalityProcessor {
+func NewFinalityProcessor(ethClient *ethclient.Client, db *supa.Client, ctx context.Context, stopChan chan StopChannel) *FinalityProcessor {
 	logger := logger.NewLogger("FinalityProcessor")
-	ctx, cancel := context.WithCancel(context.Background())
 
 	return &FinalityProcessor{
 		logger:    logger,
 		ethClient: ethClient,
 		db:        db,
 		ctx:       ctx,
-		cancel:    cancel,
+		stopChan:  stopChan,
 		wg:        sync.WaitGroup{},
-		errors:    errorChan,
 	}
+
 }
 
 func (f *FinalityProcessor) Start() error {
 	f.logger.Info("Finality processor started")
 
+	errorChan := make(chan error)
+
+	f.wg.Add(1)
 	go func() {
+		defer f.wg.Done()
 
 		for {
 
 			select {
 			case <-f.ctx.Done():
+				f.logger.Info("Context cancelled, stopping finality processor")
+				return
+			case <-f.stopChan:
+				f.logger.Info("Stop signal received, stopping finality processor")
+				return
+			case err := <-errorChan:
+				f.logger.Error("Error in finality processor: %v", err)
+				f.stopChan <- StopChannel{
+					blockNumber: 0,
+					blockHash:   "",
+					isReorg:     false,
+				}
 				return
 			default:
 
@@ -66,7 +78,7 @@ func (f *FinalityProcessor) Start() error {
 					currentBlock, err := f.ethClient.HeaderByNumber(context.Background(), big.NewInt(blockNumbers[blockTag]))
 					if err != nil {
 						f.logger.Error("Error getting last %s block: %v", blockTag, err)
-						f.errors <- err
+						errorChan <- err
 						return
 					}
 
@@ -84,13 +96,13 @@ func (f *FinalityProcessor) Start() error {
 					f.logger.Info("Nearest ingested %v event id: %v, block number: %v, hash: %v", blockTag, nearestIngestedEvent.Id, nearestIngestedEvent.BlockNumber, nearestIngestedEvent.BlockHash)
 					if err != nil {
 						f.logger.Error("Error getting nearest ingested event: %v", err)
-						f.errors <- err
+						errorChan <- err
 						return
 					}
 					isCanonical, err := f.checkCanonicalBlock(nearestIngestedEvent.BlockNumber, nearestIngestedEvent.BlockHash, nearestIngestedEvent.Id)
 					if err != nil {
 						f.logger.Error("Error checking if nearest ingested event is canonical: %v", err)
-						f.errors <- err
+						errorChan <- err
 						return
 					}
 
@@ -99,20 +111,17 @@ func (f *FinalityProcessor) Start() error {
 						err := f.updateLastValidatedBlockNumber(blockTag, nearestIngestedEvent.BlockNumber)
 						if err != nil {
 							f.logger.Error("Error updating last validated block number: %v", err)
-							f.errors <- err
+							errorChan <- err
 							return
 						}
 						continue
 					} else {
 						// raise hell
 						f.logger.Error("Nearest ingested event does not match canonical block: %v, %v", nearestIngestedEvent.BlockNumber, nearestIngestedEvent.BlockHash)
-						// TODO: trigger re-org. (stops all processes, locates last valid event, starts from there)
-						reorgErr := reorg.NewReorgError(
-							nearestIngestedEvent.BlockNumber,
-							nearestIngestedEvent.BlockHash,
-							"nearest ingested event does not match canonical block",
-						)
-						f.errors <- reorgErr
+						f.stopChan <- StopChannel{
+							blockNumber: nearestIngestedEvent.BlockNumber,
+							blockHash:   nearestIngestedEvent.BlockHash,
+						}
 						return
 					}
 				}
@@ -123,13 +132,6 @@ func (f *FinalityProcessor) Start() error {
 	}()
 
 	return nil
-}
-
-func (f *FinalityProcessor) Stop() {
-	f.once.Do(func() {
-		f.logger.Info("Stopping finality processor...")
-		f.cancel()
-	})
 }
 
 func (f *FinalityProcessor) getNearestIngestedEvent(blockNumber int64) (*database.PublicEventsSelect, error) {

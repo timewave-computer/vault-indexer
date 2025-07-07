@@ -3,9 +3,7 @@ package indexer
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"math/rand"
-	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -23,12 +21,12 @@ import (
 type Transformer struct {
 	db               *supa.Client
 	pgdb             *sql.DB
-	ctx              context.Context
-	cancel           context.CancelFunc
-	wg               sync.WaitGroup
 	logger           *logger.Logger
 	transformHandler *transformHandler.TransformHandler
 	healthServer     *health.Server
+	ctx              context.Context
+	stopChan         chan StopChannel
+	errorChan        chan error
 
 	// Add retry tracking
 	retryCount    int
@@ -38,8 +36,7 @@ type Transformer struct {
 }
 
 // NewTransformer creates a new transformer instance
-func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client) (*Transformer, error) {
-	ctx, cancel := context.WithCancel(context.Background())
+func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client, ctx context.Context, stopChan chan StopChannel) (*Transformer, error) {
 
 	// Configure connection pool
 	pgdb.SetMaxOpenConns(1) // positions must be processed sequentially, parallel processing is not supported here
@@ -47,7 +44,6 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client
 
 	// Test the connection
 	if err := pgdb.Ping(); err != nil {
-		cancel()
 		return nil, err
 	}
 
@@ -65,20 +61,19 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client
 	// initialize transform handler
 	transformHandler := transformHandler.NewHandler(depositHandler, transferHandler, withdrawHandler, rateUpdateHandler)
 
-	// Create health check server
-	healthServer := health.NewServer(8081, "transformer") // Different port for transformer health checks
+	errorChan := make(chan error)
 
 	return &Transformer{
+		ctx:              ctx,
+		stopChan:         stopChan,
 		db:               supa,
 		pgdb:             pgdb,
-		ctx:              ctx,
-		cancel:           cancel,
 		logger:           logger.NewLogger("Transformer"),
 		maxRetries:       5,
 		lastError:        nil,
 		retryCount:       0,
 		transformHandler: transformHandler,
-		healthServer:     healthServer,
+		errorChan:        errorChan,
 	}, nil
 }
 
@@ -86,17 +81,23 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client
 func (t *Transformer) Start() error {
 	t.logger.Info("Transformer started")
 
-	// Start health check server
-	if err := t.healthServer.Start(); err != nil {
-		return fmt.Errorf("failed to start health check server: %w", err)
-	}
-
-	t.wg.Add(1)
 	go func() {
-		defer t.wg.Done()
 		for {
+			t.logger.Info("Transformer loop")
 			select {
+			case <-t.stopChan:
+				t.logger.Info("Stop signal received, stopping transformer")
+				return
+			case err := <-t.errorChan:
+				t.logger.Error("Error in transformer: %v", err)
+				t.stopChan <- StopChannel{
+					blockNumber: 0,
+					blockHash:   "",
+					isReorg:     false,
+				}
+				return
 			case <-t.ctx.Done():
+				t.logger.Info("Context cancelled, stopping transformer")
 				return
 			default:
 				// Query for unprocessed events outside of transaction
@@ -140,8 +141,12 @@ func (t *Transformer) Start() error {
 				if len(events) == 0 {
 					t.logger.Info("No events to transform, waiting 15 seconds")
 					select {
+					case <-t.stopChan:
+						t.logger.Info("Stop signal received, stopping transformer")
+						return
 					case <-time.After(15 * time.Second):
 					case <-t.ctx.Done():
+						t.logger.Info("Context cancelled, stopping transformer")
 						return
 					}
 					continue
@@ -150,7 +155,7 @@ func (t *Transformer) Start() error {
 				t.logger.Info("Found %d events to transform, processing...", len(events))
 
 				// Process the entire batch, retrying if any event fails
-				if err := t.processBatch(events); err != nil {
+				if err := t.processBatch(t.ctx, events); err != nil {
 					t.handleError(err)
 					continue
 				}
@@ -166,11 +171,11 @@ func (t *Transformer) Start() error {
 }
 
 // processBatch handles the processing of a batch of events, retrying the entire batch if any event fails
-func (t *Transformer) processBatch(events []database.PublicEventsSelect) error {
+func (t *Transformer) processBatch(ctx context.Context, events []database.PublicEventsSelect) error {
 	for _, event := range events {
 		t.logger.Debug("Starting DB transaction for %v, id: %v", event.EventName, event.Id)
 
-		tx, err := t.pgdb.BeginTx(t.ctx, &sql.TxOptions{
+		tx, err := t.pgdb.BeginTx(ctx, &sql.TxOptions{
 			Isolation: sql.LevelReadCommitted,
 		})
 		if err != nil {
@@ -261,7 +266,7 @@ func (t *Transformer) handleError(err error) {
 		t.logger.Debug("Incrementing retry count: %v", t.retryCount)
 		if t.retryCount >= t.maxRetries {
 			t.logger.Error("FAILURE: Max retries (%d) reached for error: %v. Halting the transformer.", t.maxRetries, err)
-			t.cancel()
+			t.errorChan <- err
 			return
 		}
 	} else {
@@ -285,22 +290,6 @@ func (t *Transformer) handleError(err error) {
 	case <-t.ctx.Done():
 		t.logger.Debug("Context cancelled during backoff")
 		return
-	}
-}
-
-// Stop gracefully stops the transformer
-func (t *Transformer) Stop() {
-	t.logger.Info("Stopping transformer...")
-	t.cancel()
-	t.wg.Wait()
-
-	// Stop health check server
-	if err := t.healthServer.Stop(); err != nil {
-		t.logger.Error("Error stopping health check server: %v", err)
-	}
-
-	if t.pgdb != nil {
-		t.pgdb.Close()
 	}
 }
 

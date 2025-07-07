@@ -29,7 +29,7 @@ func main() {
 	defer cancel()
 
 	// Create indexer with parent context
-	idx, err := indexer.New(ctx, cfg)
+	idx, err := indexer.New(ctx, cfg, logger.NewLogger("Indexer"))
 	if err != nil {
 		log.Fatalf("Failed to create indexer: %v", err)
 	}
