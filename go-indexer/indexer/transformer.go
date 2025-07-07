@@ -35,7 +35,6 @@ type Transformer struct {
 	maxRetries    int
 	lastError     error
 	lastErrorTime *time.Time
-	once          sync.Once
 }
 
 // NewTransformer creates a new transformer instance
@@ -193,7 +192,7 @@ func (t *Transformer) processBatch(events []database.PublicEventsSelect) error {
 
 		for _, op := range dbOperations.inserts {
 			if err := t.insertToTable(tx, op.table, op.data); err != nil {
-				t.logger.Error("Error inserting into table %v: %v, data: %v", op.table, err, op.data)
+				t.logger.Error("Error inserting into table %v: %v", op.table, err)
 				tx.Rollback()
 				return err
 			}
@@ -201,7 +200,7 @@ func (t *Transformer) processBatch(events []database.PublicEventsSelect) error {
 
 		for _, op := range dbOperations.updates {
 			if err := t.updateInTable(tx, op.table, op.data); err != nil {
-				t.logger.Error("Error updating table %v: %v, data: %v", op.table, err, op.data)
+				t.logger.Error("Error updating table %v: %v", op.table, err)
 				tx.Rollback()
 				return err
 			}
@@ -250,7 +249,6 @@ func (t *Transformer) transform(event database.PublicEventsSelect) (DatabaseOper
 
 // handleError manages retry logic and backoff
 func (t *Transformer) handleError(err error) {
-
 	now := time.Now()
 	t.logger.Debug("Error occurred: err %v lastError %v, retryCount: %v", err, t.lastError, t.retryCount)
 
@@ -292,20 +290,18 @@ func (t *Transformer) handleError(err error) {
 
 // Stop gracefully stops the transformer
 func (t *Transformer) Stop() {
-	t.once.Do(func() {
-		t.logger.Info("Stopping transformer...")
-		t.cancel()
-		t.wg.Wait()
+	t.logger.Info("Stopping transformer...")
+	t.cancel()
+	t.wg.Wait()
 
-		// Stop health check server
-		if err := t.healthServer.Stop(); err != nil {
-			t.logger.Error("Error stopping health check server: %v", err)
-		}
+	// Stop health check server
+	if err := t.healthServer.Stop(); err != nil {
+		t.logger.Error("Error stopping health check server: %v", err)
+	}
 
-		if t.pgdb != nil {
-			t.pgdb.Close()
-		}
-	})
+	if t.pgdb != nil {
+		t.pgdb.Close()
+	}
 }
 
 func (t *Transformer) insertToTable(tx *sql.Tx, table string, data any) error {

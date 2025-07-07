@@ -24,6 +24,7 @@ import (
 	event_queue "github.com/timewave/vault-indexer/go-indexer/event-ingestion-queue"
 	"github.com/timewave/vault-indexer/go-indexer/health"
 	"github.com/timewave/vault-indexer/go-indexer/logger"
+	"github.com/timewave/vault-indexer/go-indexer/reorg"
 )
 
 // Indexer handles blockchain event indexing and position tracking
@@ -41,6 +42,7 @@ type Indexer struct {
 	eventQueue            *event_queue.EventQueue
 	requiredConfirmations uint64
 	finalityProcessor     *FinalityProcessor
+	reorgHandler          *reorg.Handler
 	once                  sync.Once
 	errorChan             chan error
 	stopChan              chan struct{}
@@ -73,7 +75,9 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 
 	eventProcessor := NewEventProcessor(eventQueue, extractor, ethClient, 4)
 
-	finalityProcessor := NewFinalityProcessor(ethClient, supabaseClient)
+	errorChan := make(chan error)
+
+	finalityProcessor := NewFinalityProcessor(ethClient, supabaseClient, errorChan)
 
 	postgresClient, err := sql.Open("postgres", cfg.Database.PostgresConnectionString)
 	if err != nil {
@@ -87,6 +91,9 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 		cancel()
 		return nil, fmt.Errorf("failed to create transformer: %w", err)
 	}
+
+	// Create reorg handler
+	reorgHandler := reorg.NewHandler(supabaseClient, postgresClient, ethClient, cfg)
 
 	// Create health check server
 	healthServer := health.NewServer(8080, "event_ingestion") // Default port for indexer health checks
@@ -103,9 +110,10 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 		logger:                indexerLogger,
 		healthServer:          healthServer,
 		finalityProcessor:     finalityProcessor,
+		reorgHandler:          reorgHandler,
 		eventQueue:            eventQueue,
 		requiredConfirmations: 4,
-		errorChan:             make(chan error),
+		errorChan:             errorChan,
 		stopChan:              make(chan struct{}),
 		processWg:             sync.WaitGroup{},
 		eventProcessor:        eventProcessor,
@@ -300,7 +308,6 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 				default:
 					// continue
 				}
-
 				lastIndexedBlock, err := i.getLastIndexedBlock(contractAddress, event)
 				if err != nil {
 					// Use centralized error channel
@@ -480,8 +487,13 @@ func (i *Indexer) startErrorHandler() {
 		for {
 			select {
 			case err := <-i.errorChan:
-				i.logger.Error("Error: %v", err)
-				i.Stop()
+				if reorg.IsReorgError(err) {
+					i.logger.Error("Reorg detected, initiating cleanup: %v", err)
+					i.handleReorg(err.(*reorg.ReorgError))
+				} else {
+					i.logger.Error("Error: %v", err)
+					i.Stop()
+				}
 				return
 			case <-i.ctx.Done():
 				// context cancelled, stop listening for errors
@@ -489,4 +501,29 @@ func (i *Indexer) startErrorHandler() {
 			}
 		}
 	}()
+}
+
+// handleReorg handles blockchain reorganization by stopping ingestion, running cleanup, then stopping
+func (i *Indexer) handleReorg(reorgErr *reorg.ReorgError) {
+	i.logger.Info("Handling reorg at block %d (hash: %s)", reorgErr.BlockNumber, reorgErr.BlockHash)
+
+	// Step 1: Stop event ingestion and processing (but not finality processor yet)
+	i.logger.Info("Stopping event ingestion and processing...")
+	if i.eventProcessor != nil {
+		i.eventProcessor.Stop()
+	}
+
+	// Step 2: Stop transformer
+	i.logger.Info("Stopping transformer...")
+	i.transformer.Stop()
+
+	// Step 3: Run reorg cleanup logic using the dedicated handler
+	i.logger.Info("Running reorg cleanup logic...")
+	if err := i.reorgHandler.HandleReorg(reorgErr); err != nil {
+		i.logger.Error("Error during reorg cleanup: %v", err)
+	}
+
+	// Step 4: Stop everything else
+	i.logger.Info("Reorg cleanup complete, stopping indexer...")
+	i.Stop()
 }
