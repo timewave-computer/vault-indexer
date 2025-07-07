@@ -77,34 +77,25 @@ func (f *FinalityProcessor) Start() error {
 				}
 
 				for _, blockTag := range blockTags {
-					canonicalBlock, err := f.ethClient.HeaderByNumber(context.Background(), big.NewInt(blockNumbers[blockTag]))
+					currentBlock, err := f.ethClient.HeaderByNumber(context.Background(), big.NewInt(blockNumbers[blockTag]))
 					if err != nil {
 						f.logger.Error("Error getting last %s block: %v", blockTag, err)
 						errors <- err
 						return
 					}
 
-					canonicalBlockNumber := canonicalBlock.Number.Int64()
+					currentBlockNumber := currentBlock.Number.Int64()
 
-					f.logger.Info("Canonical %s block: %d", blockTag, canonicalBlockNumber)
+					f.logger.Info("Current %s block: %d", blockTag, currentBlockNumber)
 
-					lastValidatedBlockNumber, err := f.getLastValidatedBlockNumber(blockTag)
-					if err != nil {
-						f.logger.Error("Error getting last validated block: %v", err)
-						errors <- err
-						return
-					}
-
-					f.logger.Info("Last validated %s block: %s", blockTag, lastValidatedBlockNumber)
-
-					nearestIngestedEvent, err := f.getNearestIngestedEvent(canonicalBlockNumber)
+					nearestIngestedEvent, err := f.getNearestIngestedEvent(currentBlockNumber)
 					if nearestIngestedEvent == nil {
 						// no ingested events yet, wait for next iteration
 						f.logger.Info("No ingested events yet, waiting for next iteration")
 						time.Sleep(15 * time.Second)
 						continue
 					}
-					f.logger.Info("Nearest ingested %v event: %v %v", blockTag, nearestIngestedEvent.BlockNumber, nearestIngestedEvent.BlockHash)
+					f.logger.Info("Nearest ingested %v event: %v hash: %v", blockTag, nearestIngestedEvent.BlockNumber, nearestIngestedEvent.BlockHash)
 					if err != nil {
 						f.logger.Error("Error getting nearest ingested event: %v", err)
 						errors <- err
@@ -207,9 +198,10 @@ func (f *FinalityProcessor) getNearestIngestedEvent(blockNumber int64) (*databas
 	}
 }
 
+// fetches by block hash and compares block number
 func (f *FinalityProcessor) checkCanonicalBlock(blockNumber int64, blockHash string) (bool, error) {
 	blockNumberHex := fmt.Sprintf("0x%x", blockNumber)
-	f.logger.Info("Checking canonical block for %v (hex: %s) by hash %v", blockNumber, blockNumberHex, blockHash)
+	f.logger.Debug("Checking canonical block for %v (hex: %s) by hash %v", blockNumber, blockNumberHex, blockHash)
 
 	header, err := f.ethClient.HeaderByHash(context.Background(), common.HexToHash(blockHash))
 
@@ -220,15 +212,14 @@ func (f *FinalityProcessor) checkCanonicalBlock(blockNumber int64, blockHash str
 	f.logger.Info("Canonical block number for hash %v: %v", blockHash, header.Number.Int64())
 
 	isMatch := blockNumber == header.Number.Int64()
-	f.logger.Info("Is match: %v, event block number: %v, header block number: %v", isMatch, blockNumber, header.Number.Int64())
+	f.logger.Debug("Is match: %v, event block number: %v, header block number: %v", isMatch, blockNumber, header.Number.Int64())
 
-	// return isMatch, nil
-	return true, nil
+	return isMatch, nil
 }
 
 func (f *FinalityProcessor) updateLastValidatedBlockNumber(blockTag string, blockNumber int64) error {
 
-	f.logger.Info("Setting last validated %s block to %d", blockTag, blockNumber)
+	f.logger.Info("Setting last validated %v block to %v", blockTag, blockNumber)
 
 	_, _, err := f.db.From("block_finality").Upsert(
 		database.ToBlockFinalityUpsert(database.PublicBlockFinalityUpdate{

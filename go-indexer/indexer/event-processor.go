@@ -24,6 +24,7 @@ type EventProcessor struct {
 	healthServer          *health.Server
 	requiredConfirmations uint64
 	stopChan              chan struct{}
+	stopOnce              sync.Once
 }
 
 // NewEventProcessor creates a new event processor instance
@@ -166,8 +167,10 @@ func (ep *EventProcessor) Stop() {
 	// Set health status to unhealthy
 	ep.healthServer.SetStatus("unhealthy")
 
-	// Close stop channel to signal shutdown
-	close(ep.stopChan)
+	// Close stop channel to signal shutdown (only once)
+	ep.stopOnce.Do(func() {
+		close(ep.stopChan)
+	})
 
 	// Cancel context
 	ep.cancel()
@@ -187,10 +190,21 @@ func (ep *EventProcessor) Stop() {
 // This method is safe to call multiple times and from multiple goroutines
 func (ep *EventProcessor) StopProcessor() {
 	ep.logger.Info("External stop signal sent - stopping event processor")
-	select {
-	case ep.stopChan <- struct{}{}:
-		// Signal sent successfully
-	default:
-		// Channel is full or closed, ignore
-	}
+
+	// Use a recover mechanism to handle the case where the channel is already closed
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// Channel is already closed, this is expected if Stop() was called
+				ep.logger.Info("Stop channel already closed, ignoring stop signal")
+			}
+		}()
+
+		select {
+		case ep.stopChan <- struct{}{}:
+			// Signal sent successfully
+		default:
+			// Channel is full, ignore
+		}
+	}()
 }
