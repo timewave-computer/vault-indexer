@@ -448,8 +448,6 @@ func (i *Indexer) Stop() error {
 			i.logger.Error("Error stopping health check server: %v", err)
 		}
 
-		i.logger.Info("Stopping child processes...")
-
 		// Cancel context to stop all child processes
 		i.cancel()
 
@@ -458,15 +456,12 @@ func (i *Indexer) Stop() error {
 		i.transformer.Stop()
 		i.finalityProcessor.Stop()
 
-		i.logger.Info("waiting for child processes to finish...")
-
-		// // Wait for all process monitoring goroutines to finish
-		// i.processWg.Wait()
+		// Wait for all process monitoring goroutines to finish
+		i.processWg.Wait()
 
 		// Close error channel
 		close(i.errorChan)
 
-		i.logger.Info("closing external resources...")
 		// Finally release external resources
 		i.ethClient.Close()
 		i.postgresClient.Close()
