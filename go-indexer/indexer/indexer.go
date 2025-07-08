@@ -46,6 +46,7 @@ type Indexer struct {
 	reorgChan             chan ReorgEvent
 	processWg             sync.WaitGroup
 	eventProcessor        *EventProcessor
+	reorgHandler          *ReorgHandler
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
@@ -74,6 +75,8 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	eventProcessor := NewEventProcessor(eventQueue, extractor, ethClient, 4)
 
 	finalityProcessor := NewFinalityProcessor(ethClient, supabaseClient)
+
+	reorgHandler := NewReorgHandler(ethClient, supabaseClient)
 
 	postgresClient, err := sql.Open("postgres", cfg.Database.PostgresConnectionString)
 	if err != nil {
@@ -109,6 +112,7 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 		reorgChan:             make(chan ReorgEvent),
 		processWg:             sync.WaitGroup{},
 		eventProcessor:        eventProcessor,
+		reorgHandler:          reorgHandler,
 	}, nil
 }
 
@@ -153,6 +157,7 @@ func (i *Indexer) Start() error {
 	i.logger.Info("Loading historical events, current block: %d", currentBlock)
 	err = i.loadHistoricalEvents(currentBlock, &wg)
 	wg.Wait() // do not progress until all historical events are loaded
+
 	if err != nil {
 		return fmt.Errorf("failed to backfill events: %w", err)
 	}
@@ -539,30 +544,11 @@ func (i *Indexer) handleReorg(reorgEvent ReorgEvent) {
 
 	// 3. Execute cleanup logic
 	i.logger.Info("Executing reorg cleanup logic...")
-	if err := i.cleanupReorgData(reorgEvent); err != nil {
+	if err := i.reorgHandler.cleanupReorgData(reorgEvent); err != nil {
 		i.logger.Error("Failed to cleanup reorg data: %v", err)
 	}
 
 	// 4. Power down the indexer
 	i.logger.Info("Powering down indexer after reorg handling...")
 	i.Stop()
-}
-
-func (i *Indexer) cleanupReorgData(reorgEvent ReorgEvent) error {
-	i.logger.Info("Cleaning up data for reorg at block %d", reorgEvent.BlockNumber)
-
-	// TODO: Implement specific cleanup logic based on your requirements
-	// This could include:
-	// - Removing events from database that are from the reorged blocks
-	// - Marking positions as invalid
-	// - Clearing cached data
-	// - Updating finality status
-
-	// Example cleanup operations:
-	// 1. Delete events from reorged blocks
-	// 2. Reset position tracking
-	// 3. Clear any cached state
-
-	i.logger.Info("Reorg cleanup completed for block %d", reorgEvent.BlockNumber)
-	return nil
 }
