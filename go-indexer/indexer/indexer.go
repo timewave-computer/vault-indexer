@@ -116,7 +116,7 @@ func (i *Indexer) Start() error {
 	i.logger.Info("Indexer started")
 
 	// Start centralized error and reorg event handler
-	i.startEventHandler()
+	i.startErrorAndReorgMonitoring()
 
 	if err := i.healthServer.Start(); err != nil {
 		return fmt.Errorf("failed to start health check server: %w", err)
@@ -500,7 +500,7 @@ func (i *Indexer) getLastIndexedBlock(contractAddress common.Address, event abi.
 	return &lastIndexedEvent.BlockNumber, nil
 }
 
-func (i *Indexer) startEventHandler() {
+func (i *Indexer) startErrorAndReorgMonitoring() {
 	go func() {
 		for {
 			select {
