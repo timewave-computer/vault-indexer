@@ -3,7 +3,7 @@
 import { isAddress } from 'ethers'
 import defineRoute from "@omer-x/next-openapi-route-handler";
 import { z } from "zod";
-import { getCaseInsensitiveQuery, supabase , timeRangeSchema, getBlockNumberFilterForTag, MAX_TIME_RANGE_RESULTS} from "@/app/lib";
+import { getCaseInsensitiveQuery, supabase , timeRangeSchema, getBlockNumberFilterForTag} from "@/app/lib";
 
  const getRatesResponseSchema = z.object({
   data: z.array(z.object({
@@ -13,7 +13,7 @@ import { getCaseInsensitiveQuery, supabase , timeRangeSchema, getBlockNumberFilt
   })),
 })
 
-
+export const MAX_TIME_RANGE_RESULTS = 5000
 export const { GET } = defineRoute({
   method: "GET",
   operationId: "getRates",

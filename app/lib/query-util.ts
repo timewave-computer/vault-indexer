@@ -2,8 +2,7 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { Database } from "@/app/types";
 import { BlockTagSchema } from "@/app/lib";
 
-// impose a limit on the number of results for time range queries
-export const MAX_TIME_RANGE_RESULTS = 5000
+
 
 export const getCaseInsensitiveQuery = (value: string) => {
     return value.toLowerCase()
