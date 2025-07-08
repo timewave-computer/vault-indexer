@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { isAddress } from 'ethers'
 import defineRoute from "@omer-x/next-openapi-route-handler";
-import { getMostRecentBlockNumber, supabase, paginationSchema } from "@/app/lib";
+import { supabase, paginationSchema, getCaseInsensitiveQuery, getBlockNumberFilterForTag } from "@/app/lib";
 
 const getPositionsQuerySchema = paginationSchema.extend({
   owner_address: z.string().optional(),
@@ -45,7 +45,7 @@ export const { GET } = defineRoute({
         throw new Error('Invalid owner address')
       }
 
-      const blockNumber = blockTag ? (await getMostRecentBlockNumber(blockTag)) : 0
+      const blockNumberFilter = blockTag ? (await getBlockNumberFilterForTag(blockTag, supabase)) : undefined
 
       const query = supabase.from('positions').select(`
         id:position_index_id,
@@ -55,15 +55,15 @@ export const { GET } = defineRoute({
         owner_address,
         withdraw_receiver_address,
         is_terminated
-    `).eq('contract_address', vaultAddress)
+    `).eq('contract_address', getCaseInsensitiveQuery(vaultAddress))
       .limit(Number(limit))
 
     if (owner_address) {
       query.eq('owner_address', owner_address)
     }
 
-    if (blockTag && blockNumber > 0) {
-      query.lte('position_start_height', blockNumber)
+    if (blockNumberFilter) {
+      query.lte('position_start_height', blockNumberFilter)
     }
 
 

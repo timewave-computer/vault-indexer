@@ -37,15 +37,15 @@ export type Database = {
       block_finality: {
         Row: {
           block_tag: string
-          last_confirmed_block_number: number
+          last_validated_block_number: number
         }
         Insert: {
           block_tag: string
-          last_confirmed_block_number: number
+          last_validated_block_number: number
         }
         Update: {
           block_tag?: string
-          last_confirmed_block_number?: number
+          last_validated_block_number?: number
         }
         Relationships: []
       }

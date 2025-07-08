@@ -1,4 +1,6 @@
-import { ethers as Ethers, BlockTag, JsonRpcApiProviderOptions } from "ethers";
+
+import { ethers as Ethers, JsonRpcApiProviderOptions } from "ethers";
+
 
 const rpcUrl = process.env.API_ETH_RPC_URL;
 if (!rpcUrl) {
@@ -19,18 +21,8 @@ const getEthersProvider = () => {
   }, options);
 }
 
-const ethersProvider = getEthersProvider()
+export const ethersProvider = getEthersProvider()
 
-export const getMostRecentBlockNumber = async (
-    blockTag?: BlockTag
-): Promise<number> => {
-
-  const block = await ethersProvider.getBlock(blockTag ?? "latest");
-  if (!block) {
-    throw new Error('Could not fetch finalized block');
-  }
-  return block.number;
-};
 
 
 

@@ -3,6 +3,8 @@ import { z } from "zod";
 const orderSchema = z.enum(['asc', 'desc']).optional().default('asc').describe('Return results in ascending or descending order')
  const blockTagSchema = z.enum(['finalized', 'safe', 'latest']).optional().describe('Ethereum block tag with which to filter results. If not specified, the most recent events will be returned.')
 
+ export type BlockTagSchema = z.infer<typeof blockTagSchema>
+
  export const paginationSchema = z.object({
     from: z.coerce.number().int().min(0).optional().default(0).describe('Index (ID) from which to start returning results'),
     limit: z.coerce.number().int().min(1).optional().default(100).describe('Number of results to return'),
