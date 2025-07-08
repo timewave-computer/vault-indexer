@@ -3,6 +3,7 @@ package indexer
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -19,13 +20,16 @@ import (
 
 // Transformer handles processing of raw events into derived data
 type Transformer struct {
-	db               *supa.Client
-	pgdb             *sql.DB
-	ctx              context.Context
-	cancel           context.CancelFunc
-	wg               sync.WaitGroup
-	logger           *logger.Logger
-	transformHandler *transformHandler.TransformHandler
+	db                         *supa.Client
+	pgdb                       *sql.DB
+	ctx                        context.Context
+	cancel                     context.CancelFunc
+	wg                         sync.WaitGroup
+	logger                     *logger.Logger
+	transformHandler           *transformHandler.TransformHandler
+	positionTransformer        *transformers.PositionTransformer
+	withdrawRequestTransformer *transformers.WithdrawRequestTransformer
+	rateUpdateTransformer      *transformers.RateUpdateTransformer
 
 	// Add retry tracking
 	retryCount    int
@@ -64,15 +68,18 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client
 	transformHandler := transformHandler.NewHandler(depositHandler, transferHandler, withdrawHandler, rateUpdateHandler)
 
 	return &Transformer{
-		db:               supa,
-		pgdb:             pgdb,
-		ctx:              ctx,
-		cancel:           cancel,
-		logger:           logger.NewLogger("Transformer"),
-		maxRetries:       5,
-		lastError:        nil,
-		retryCount:       0,
-		transformHandler: transformHandler,
+		db:                         supa,
+		pgdb:                       pgdb,
+		ctx:                        ctx,
+		cancel:                     cancel,
+		logger:                     logger.NewLogger("Transformer"),
+		maxRetries:                 5,
+		lastError:                  nil,
+		retryCount:                 0,
+		transformHandler:           transformHandler,
+		positionTransformer:        positionTransformer,
+		withdrawRequestTransformer: withdrawRequestTransformer,
+		rateUpdateTransformer:      rateUpdateTransformer,
 	}, nil
 }
 
@@ -329,4 +336,48 @@ type DatabaseOperations struct {
 
 func ptr[T any](v T) *T {
 	return &v
+}
+
+// handleCleanupFromBlock handles the cleanup of the database from a given block number
+func (t *Transformer) handleCleanupFromBlock(blockNumber int64, pgdb *sql.DB) error {
+
+	transformersArr := []interface {
+		CleanupFromBlock(blockNumber int64) []string
+	}{
+		t.withdrawRequestTransformer,
+		t.rateUpdateTransformer,
+		t.positionTransformer,
+	}
+	tx, err := pgdb.BeginTx(t.ctx, &sql.TxOptions{
+		Isolation: sql.LevelReadCommitted,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %v", err)
+	}
+
+	for _, transformer := range transformersArr {
+		sqls := transformer.CleanupFromBlock(blockNumber)
+		for _, sql := range sqls {
+			_, err := pgdb.Exec(sql)
+			if err != nil {
+				tx.Rollback()
+				return fmt.Errorf("failed to handle cleanup for %v: %v", transformer, err)
+			}
+		}
+	}
+
+	_, err = tx.Exec("DELETE FROM events WHERE block_number >= $1", blockNumber)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete events: %v", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %v", err)
+	}
+
+	t.logger.Info("Successfully cleaned up from block: %v", blockNumber)
+
+	return nil
+
 }
