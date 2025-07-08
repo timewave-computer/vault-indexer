@@ -3,7 +3,6 @@ package indexer
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -14,7 +13,6 @@ import (
 	"github.com/timewave/vault-indexer/go-indexer/database"
 	"github.com/timewave/vault-indexer/go-indexer/dbutil"
 	transformHandler "github.com/timewave/vault-indexer/go-indexer/event-transform-handler"
-	"github.com/timewave/vault-indexer/go-indexer/health"
 	"github.com/timewave/vault-indexer/go-indexer/logger"
 	transformers "github.com/timewave/vault-indexer/go-indexer/transformers"
 )
@@ -28,7 +26,6 @@ type Transformer struct {
 	wg               sync.WaitGroup
 	logger           *logger.Logger
 	transformHandler *transformHandler.TransformHandler
-	healthServer     *health.Server
 
 	// Add retry tracking
 	retryCount    int
@@ -66,9 +63,6 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client
 	// initialize transform handler
 	transformHandler := transformHandler.NewHandler(depositHandler, transferHandler, withdrawHandler, rateUpdateHandler)
 
-	// Create health check server
-	healthServer := health.NewServer(8081, "transformer") // Different port for transformer health checks
-
 	return &Transformer{
 		db:               supa,
 		pgdb:             pgdb,
@@ -79,18 +73,12 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client
 		lastError:        nil,
 		retryCount:       0,
 		transformHandler: transformHandler,
-		healthServer:     healthServer,
 	}, nil
 }
 
 // Start begins the transformation process
 func (t *Transformer) Start() error {
 	t.logger.Info("Transformer started")
-
-	// Start health check server
-	if err := t.healthServer.Start(); err != nil {
-		return fmt.Errorf("failed to start health check server: %w", err)
-	}
 
 	t.wg.Add(1)
 	go func() {
@@ -159,7 +147,6 @@ func (t *Transformer) Start() error {
 				// Reset retry count after successful batch
 				t.retryCount = 0
 				t.lastError = nil
-				t.healthServer.SetStatus("healthy")
 			}
 		}
 	}()
@@ -254,9 +241,6 @@ func (t *Transformer) handleError(err error) {
 	now := time.Now()
 	t.logger.Debug("Error occurred: err %v lastError %v, retryCount: %v", err, t.lastError, t.retryCount)
 
-	// Set health status to unhealthy when retrying
-	t.healthServer.SetStatus("unhealthy")
-
 	// If this is the same error as before
 	if t.lastError != nil {
 		t.retryCount++
@@ -296,11 +280,6 @@ func (t *Transformer) Stop() {
 		t.logger.Info("Stopping transformer...")
 		t.cancel()
 		t.wg.Wait()
-
-		// Stop health check server
-		if err := t.healthServer.Stop(); err != nil {
-			t.logger.Error("Error stopping health check server: %v", err)
-		}
 
 		if t.pgdb != nil {
 			t.pgdb.Close()

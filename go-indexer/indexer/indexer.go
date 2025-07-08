@@ -43,7 +43,7 @@ type Indexer struct {
 	finalityProcessor     *FinalityProcessor
 	once                  sync.Once
 	errorChan             chan error
-	stopChan              chan struct{}
+	reorgChan             chan ReorgEvent
 	processWg             sync.WaitGroup
 	eventProcessor        *EventProcessor
 }
@@ -89,7 +89,7 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	}
 
 	// Create health check server
-	healthServer := health.NewServer(8080, "event_ingestion") // Default port for indexer health checks
+	healthServer := health.NewServer(8080, "indexer") // Default port for indexer health checks
 
 	return &Indexer{
 		config:                cfg,
@@ -106,7 +106,7 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 		eventQueue:            eventQueue,
 		requiredConfirmations: 4,
 		errorChan:             make(chan error),
-		stopChan:              make(chan struct{}),
+		reorgChan:             make(chan ReorgEvent),
 		processWg:             sync.WaitGroup{},
 		eventProcessor:        eventProcessor,
 	}, nil
@@ -115,8 +115,8 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 func (i *Indexer) Start() error {
 	i.logger.Info("Indexer started")
 
-	// Start centralized error handler
-	i.startErrorHandler()
+	// Start centralized error and reorg event handler
+	i.startErrorAndReorgMonitoring()
 
 	if err := i.healthServer.Start(); err != nil {
 		return fmt.Errorf("failed to start health check server: %w", err)
@@ -182,9 +182,12 @@ func (i *Indexer) Start() error {
 		select {
 		case <-i.eventProcessor.ctx.Done():
 			i.logger.Warn("Event processor context cancelled, stopping indexer")
-			i.errorChan <- fmt.Errorf("event processor stopped")
-		case <-i.stopChan:
-			return
+			select {
+			case i.errorChan <- fmt.Errorf("event processor stopped"):
+			default:
+				// Channel is closed or full, ignore
+			}
+
 		}
 	}()
 
@@ -194,9 +197,12 @@ func (i *Indexer) Start() error {
 		select {
 		case <-i.transformer.ctx.Done():
 			i.logger.Warn("Transformer context cancelled, stopping indexer")
-			i.errorChan <- fmt.Errorf("transformer stopped")
-		case <-i.stopChan:
-			return
+			select {
+			case i.errorChan <- fmt.Errorf("transformer stopped"):
+			default:
+				// Channel is closed or full, ignore
+			}
+		default:
 		}
 	}()
 
@@ -206,9 +212,32 @@ func (i *Indexer) Start() error {
 		select {
 		case <-i.finalityProcessor.ctx.Done():
 			i.logger.Warn("Finality processor context cancelled, stopping indexer")
-			i.errorChan <- fmt.Errorf("finality processor stopped")
-		case <-i.stopChan:
-			return
+			select {
+			case i.errorChan <- fmt.Errorf("finality processor stopped"):
+			default:
+				// Channel is closed or full, ignore
+			}
+		default:
+		}
+	}()
+
+	// Monitor reorg events from finality processor
+	i.processWg.Add(1)
+	go func() {
+		defer i.processWg.Done()
+		for {
+			select {
+			case reorgEvent := <-i.finalityProcessor.ReorgChannel():
+				i.logger.Info("Reorg event received from finality processor: %+v", reorgEvent)
+				select {
+				case i.reorgChan <- reorgEvent:
+					i.logger.Info("Reorg event forwarded to main event handler")
+				default:
+					i.logger.Warn("Reorg channel is full, dropping event")
+				}
+			case <-i.ctx.Done():
+				return
+			}
 		}
 	}()
 
@@ -216,8 +245,7 @@ func (i *Indexer) Start() error {
 	select {
 	case <-i.ctx.Done():
 		i.logger.Info("Context cancelled, shutting down indexer...")
-	case <-i.stopChan:
-		i.logger.Info("Stop signal received, shutting down indexer...")
+		i.Stop()
 	}
 
 	return nil
@@ -420,9 +448,6 @@ func (i *Indexer) Stop() error {
 			i.logger.Error("Error stopping health check server: %v", err)
 		}
 
-		// Signal all goroutines to stop
-		close(i.stopChan)
-
 		// Cancel context to stop all child processes
 		i.cancel()
 
@@ -441,7 +466,7 @@ func (i *Indexer) Stop() error {
 		i.ethClient.Close()
 		i.postgresClient.Close()
 
-		// Tell the process manager the process exited in error
+		i.logger.Info("Indexer stopped successfully")
 		os.Exit(1)
 	})
 	return nil
@@ -475,18 +500,69 @@ func (i *Indexer) getLastIndexedBlock(contractAddress common.Address, event abi.
 	return &lastIndexedEvent.BlockNumber, nil
 }
 
-func (i *Indexer) startErrorHandler() {
+func (i *Indexer) startErrorAndReorgMonitoring() {
 	go func() {
 		for {
 			select {
 			case err := <-i.errorChan:
-				i.logger.Error("Error: %v", err)
+				i.logger.Error("Error received: %v", err)
 				i.Stop()
 				return
+			case reorgEvent := <-i.reorgChan:
+				i.logger.Error("Reorg event received: %+v", reorgEvent)
+				i.handleReorg(reorgEvent)
+				return
 			case <-i.ctx.Done():
-				// context cancelled, stop listening for errors
+				// context cancelled, stop listening for events
 				return
 			}
 		}
 	}()
+}
+
+func (i *Indexer) handleReorg(reorgEvent ReorgEvent) {
+	i.logger.Info("Handling reorg event: %+v", reorgEvent)
+
+	// 1. Stop all child processes
+	i.logger.Info("Stopping all child processes due to reorg...")
+	i.extractor.Stop()
+	i.transformer.Stop()
+	i.finalityProcessor.Stop()
+
+	// 2. Clear the event queue
+	i.logger.Info("Clearing event queue due to reorg...")
+	i.eventQueue.Clear()
+
+	// 3. Stop the event processor
+	i.logger.Info("Stopping event processor due to reorg...")
+	i.eventProcessor.Stop()
+
+	// 3. Execute cleanup logic
+	i.logger.Info("Executing reorg cleanup logic...")
+	if err := i.cleanupReorgData(reorgEvent); err != nil {
+		i.logger.Error("Failed to cleanup reorg data: %v", err)
+	}
+
+	// 4. Power down the indexer
+	i.logger.Info("Powering down indexer after reorg handling...")
+	i.Stop()
+}
+
+func (i *Indexer) cleanupReorgData(reorgEvent ReorgEvent) error {
+	i.logger.Info("Cleaning up data for reorg at block %d", reorgEvent.BlockNumber)
+
+	// TODO: Implement specific cleanup logic based on your requirements
+	// This could include:
+	// - Removing events from database that are from the reorged blocks
+	// - Marking positions as invalid
+	// - Clearing cached data
+	// - Updating finality status
+
+	// Example cleanup operations:
+	// 1. Delete events from reorged blocks
+	// 2. Reset position tracking
+	// 3. Clear any cached state
+
+	i.logger.Info("Reorg cleanup completed for block %d", reorgEvent.BlockNumber)
+	return nil
 }

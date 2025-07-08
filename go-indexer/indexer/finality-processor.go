@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,13 +19,20 @@ import (
 )
 
 type FinalityProcessor struct {
-	logger    *logger.Logger
-	ethClient *ethclient.Client
-	db        *supa.Client
-	ctx       context.Context
-	cancel    context.CancelFunc
-	once      sync.Once
-	wg        sync.WaitGroup
+	logger       *logger.Logger
+	ethClient    *ethclient.Client
+	db           *supa.Client
+	ctx          context.Context
+	cancel       context.CancelFunc
+	once         sync.Once
+	wg           sync.WaitGroup
+	reorgChannel chan ReorgEvent
+}
+
+type ReorgEvent struct {
+	BlockNumber int64
+	BlockHash   string
+	BlockTag    string
 }
 
 func NewFinalityProcessor(ethClient *ethclient.Client, db *supa.Client) *FinalityProcessor {
@@ -32,12 +40,13 @@ func NewFinalityProcessor(ethClient *ethclient.Client, db *supa.Client) *Finalit
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &FinalityProcessor{
-		logger:    logger,
-		ethClient: ethClient,
-		db:        db,
-		ctx:       ctx,
-		cancel:    cancel,
-		wg:        sync.WaitGroup{},
+		logger:       logger,
+		ethClient:    ethClient,
+		db:           db,
+		ctx:          ctx,
+		cancel:       cancel,
+		wg:           sync.WaitGroup{},
+		reorgChannel: make(chan ReorgEvent, 10),
 	}
 }
 
@@ -120,8 +129,18 @@ func (f *FinalityProcessor) Start() error {
 					} else {
 						// raise hell
 						f.logger.Error("Nearest ingested event does not match canonical block: %v, %v", nearestIngestedEvent.BlockNumber, nearestIngestedEvent.BlockHash)
-						// TODO: trigger re-org. (stops all processes, locates last valid event, starts from there)
-						errors <- fmt.Errorf("nearest ingested event does not match canonical block: %v, %v", nearestIngestedEvent.BlockNumber, nearestIngestedEvent.BlockHash)
+						// Send reorg event to reorgChannel
+						reorgEvent := ReorgEvent{
+							BlockNumber: nearestIngestedEvent.BlockNumber,
+							BlockHash:   nearestIngestedEvent.BlockHash,
+							BlockTag:    blockTag,
+						}
+						select {
+						case f.reorgChannel <- reorgEvent:
+							f.logger.Info("Reorg event sent to channel: %+v", reorgEvent)
+						default:
+							f.logger.Warn("Reorg channel is full, dropping event")
+						}
 						return
 					}
 				}
@@ -206,6 +225,10 @@ func (f *FinalityProcessor) checkCanonicalBlock(blockNumber int64, blockHash str
 	header, err := f.ethClient.HeaderByHash(context.Background(), common.HexToHash(blockHash))
 
 	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			f.logger.Error("Header not found for block %v", blockNumber)
+			return false, nil
+		}
 		f.logger.Error("Error getting canonical block for %v: %v", blockNumber, err)
 		return false, err
 	}
@@ -231,4 +254,8 @@ func (f *FinalityProcessor) updateLastValidatedBlockNumber(blockTag string, bloc
 		return err
 	}
 	return nil
+}
+
+func (f *FinalityProcessor) ReorgChannel() <-chan ReorgEvent {
+	return f.reorgChannel
 }

@@ -93,3 +93,11 @@ func (q *EventQueue) Print() {
 			i, event.BlockNumber, event.LogIndex, event.Event.Name, event.ContractAddress.Hex())
 	}
 }
+
+// Clear removes all events from the queue
+func (q *EventQueue) Clear() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.items = q.items[:0]
+	q.logger.Info("Event queue cleared")
+}
