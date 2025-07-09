@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/supabase-community/postgrest-go"
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/database"
@@ -22,11 +21,10 @@ var (
 var ZERO_ADDRESS = common.HexToAddress("0x0000000000000000000000000000000000000000")
 
 type PositionTransformer struct {
-	db        *supa.Client
-	ctx       context.Context
-	cancel    context.CancelFunc
-	logger    *logger.Logger
-	ethClient *ethclient.Client
+	db     *supa.Client
+	ctx    context.Context
+	cancel context.CancelFunc
+	logger *logger.Logger
 }
 
 func NewPositionTransformer(db *supa.Client) *PositionTransformer {
@@ -427,4 +425,12 @@ func (p *PositionTransformer) getMaxPositionIndexId(contractAddress string) (int
 	}
 
 	return maxPositionIndexId, nil
+}
+
+func (p *PositionTransformer) CleanupFromBlock() []string {
+
+	return []string{
+		"DELETE FROM positions WHERE position_start_height > $1;",
+		"UPDATE positions SET is_terminated = false, position_end_height = null, withdraw_receiver_address = null where position_end_height > $1;",
+	}
 }

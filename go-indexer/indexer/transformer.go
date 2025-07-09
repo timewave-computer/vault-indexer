@@ -3,6 +3,7 @@ package indexer
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -19,13 +20,16 @@ import (
 
 // Transformer handles processing of raw events into derived data
 type Transformer struct {
-	db               *supa.Client
-	pgdb             *sql.DB
-	ctx              context.Context
-	cancel           context.CancelFunc
-	wg               sync.WaitGroup
-	logger           *logger.Logger
-	transformHandler *transformHandler.TransformHandler
+	db                         *supa.Client
+	pgdb                       *sql.DB
+	ctx                        context.Context
+	cancel                     context.CancelFunc
+	wg                         sync.WaitGroup
+	logger                     *logger.Logger
+	transformHandler           *transformHandler.TransformHandler
+	positionTransformer        *transformers.PositionTransformer
+	withdrawRequestTransformer *transformers.WithdrawRequestTransformer
+	rateUpdateTransformer      *transformers.RateUpdateTransformer
 
 	// Add retry tracking
 	retryCount    int
@@ -33,6 +37,11 @@ type Transformer struct {
 	lastError     error
 	lastErrorTime *time.Time
 	once          sync.Once
+
+	// Pause/resume support
+	haltCh   chan struct{}
+	isHalted bool
+	haltMu   sync.Mutex
 }
 
 // NewTransformer creates a new transformer instance
@@ -64,15 +73,20 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client
 	transformHandler := transformHandler.NewHandler(depositHandler, transferHandler, withdrawHandler, rateUpdateHandler)
 
 	return &Transformer{
-		db:               supa,
-		pgdb:             pgdb,
-		ctx:              ctx,
-		cancel:           cancel,
-		logger:           logger.NewLogger("Transformer"),
-		maxRetries:       5,
-		lastError:        nil,
-		retryCount:       0,
-		transformHandler: transformHandler,
+		db:                         supa,
+		pgdb:                       pgdb,
+		ctx:                        ctx,
+		cancel:                     cancel,
+		logger:                     logger.NewLogger("Transformer"),
+		maxRetries:                 5,
+		lastError:                  nil,
+		retryCount:                 0,
+		transformHandler:           transformHandler,
+		positionTransformer:        positionTransformer,
+		withdrawRequestTransformer: withdrawRequestTransformer,
+		rateUpdateTransformer:      rateUpdateTransformer,
+		haltCh:                     make(chan struct{}, 1),
+		isHalted:                   false,
 	}, nil
 }
 
@@ -83,8 +97,13 @@ func (t *Transformer) Start() error {
 	t.wg.Add(1)
 	go func() {
 		defer t.wg.Done()
+		defer close(t.haltCh) // Signal that we've exited
 		for {
+
 			select {
+			case <-t.haltCh:
+				t.logger.Info("Transformer is halted")
+				return
 			case <-t.ctx.Done():
 				return
 			default:
@@ -271,6 +290,84 @@ func (t *Transformer) handleError(err error) {
 	case <-t.ctx.Done():
 		t.logger.Debug("Context cancelled during backoff")
 		return
+	}
+}
+
+// handleCleanupFromBlock handles the cleanup of the database from a given block number
+func (t *Transformer) handleCleanupFromBlock(blockNumber int64, pgdb *sql.DB) error {
+
+	if !t.isHalted {
+		return fmt.Errorf("transformer is not halted, cannot safely do reorg cleanup")
+	}
+
+	t.logger.Info("Cleaning up events ingested after block: %v", blockNumber)
+
+	transformersArr := []interface {
+		CleanupFromBlock() []string
+	}{
+		t.withdrawRequestTransformer,
+		t.rateUpdateTransformer,
+		t.positionTransformer,
+	}
+	tx, err := pgdb.BeginTx(t.ctx, &sql.TxOptions{
+		Isolation: sql.LevelReadCommitted,
+	})
+	t.logger.Info("Begin reorg cleanup transaction")
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %v", err)
+	}
+
+	for _, transformer := range transformersArr {
+		sqls := transformer.CleanupFromBlock()
+		for _, sql := range sqls {
+			_, err := tx.Exec(sql, blockNumber)
+			if err != nil {
+				tx.Rollback()
+				t.logger.Error("failed to handle cleanup for %v: %v", transformer, err)
+				return fmt.Errorf("failed to handle cleanup for %v: %v", transformer, err)
+			}
+			t.logger.Info("Successfully executed cleanup sql: %v", sql)
+		}
+	}
+
+	_, err = tx.Exec("DELETE FROM events WHERE block_number >= $1", blockNumber)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete events: %v", err)
+	}
+
+	t.logger.Info("Committing reorg cleanup transaction")
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %v", err)
+	}
+
+	t.logger.Info("Successfully cleaned up from block: %v", blockNumber)
+
+	return nil
+
+}
+
+// Halt halts the transformer processing
+// specifically for stopping processing to do reorg cleanup
+func (t *Transformer) Halt() {
+	t.haltMu.Lock()
+	defer t.haltMu.Unlock()
+	if !t.isHalted {
+		t.isHalted = true
+		// non-blocking send in case multiple Pause() calls
+		select {
+		case t.haltCh <- struct{}{}:
+		default:
+		}
+		t.logger.Info("Transformer halt requested")
+	}
+}
+func (t *Transformer) WaitHalted(timeout time.Duration) bool {
+	select {
+	case <-t.haltCh:
+		return true
+	case <-time.After(timeout):
+		return false
 	}
 }
 
