@@ -56,10 +56,27 @@ func (w *RateUpdateTransformer) Transform(args ProcessRateUpdate) (database.Publ
 	return rateUpdate, nil
 }
 
-func (p *RateUpdateTransformer) CleanupFromBlock() []string {
+// RateUpdate cleanup types that extend database types
+type RateUpdateDeleteByBlockNumber struct {
+	database.PublicRateUpdatesSelect
+}
 
-	return []string{
-		"DELETE FROM rate_updates WHERE block_number > $1;",
+// Factory functions for rate update cleanup operations
+func NewRateUpdateDeleteByBlockNumber(blockNumber int64) database.CleanupOperation {
+	return database.CleanupOperation{
+		Type:  database.CleanupDelete,
+		Table: "rate_updates",
+		Data: RateUpdateDeleteByBlockNumber{
+			PublicRateUpdatesSelect: database.PublicRateUpdatesSelect{
+				BlockNumber: blockNumber,
+			},
+		},
+		Filter: []string{"block_number"},
 	}
+}
 
+func (p *RateUpdateTransformer) ReorgCleanupQuery(blockNumber int64) []database.CleanupOperation {
+	return []database.CleanupOperation{
+		NewRateUpdateDeleteByBlockNumber(blockNumber),
+	}
 }

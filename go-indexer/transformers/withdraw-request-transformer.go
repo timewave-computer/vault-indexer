@@ -45,10 +45,27 @@ func (w *WithdrawRequestTransformer) Transform(args ProcessWithdrawRequest) (dat
 	return withdrawRequest, nil
 }
 
-func (p *WithdrawRequestTransformer) CleanupFromBlock() []string {
+// WithdrawRequest cleanup types that extend database types
+type WithdrawRequestDeleteByBlockNumber struct {
+	database.PublicWithdrawRequestsSelect
+}
 
-	return []string{
-		"DELETE FROM withdraw_requests WHERE block_number > $1;",
+// Factory functions for withdraw request cleanup operations
+func NewWithdrawRequestDeleteByBlockNumber(blockNumber int64) database.CleanupOperation {
+	return database.CleanupOperation{
+		Type:  database.CleanupDelete,
+		Table: "withdraw_requests",
+		Data: WithdrawRequestDeleteByBlockNumber{
+			PublicWithdrawRequestsSelect: database.PublicWithdrawRequestsSelect{
+				BlockNumber: blockNumber,
+			},
+		},
+		Filter: []string{"block_number"},
 	}
+}
 
+func (p *WithdrawRequestTransformer) ReorgCleanupQuery(blockNumber int64) []database.CleanupOperation {
+	return []database.CleanupOperation{
+		NewWithdrawRequestDeleteByBlockNumber(blockNumber),
+	}
 }

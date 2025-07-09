@@ -427,10 +427,54 @@ func (p *PositionTransformer) getMaxPositionIndexId(contractAddress string) (int
 	return maxPositionIndexId, nil
 }
 
-func (p *PositionTransformer) CleanupFromBlock() []string {
+// Position cleanup types that extend database types
+type PositionDeleteByStartHeight struct {
+	database.PublicPositionsSelect
+}
 
-	return []string{
-		"DELETE FROM positions WHERE position_start_height > $1;",
-		"UPDATE positions SET is_terminated = false, position_end_height = null, withdraw_receiver_address = null where position_end_height > $1;",
+type PositionUpdateByEndHeight struct {
+	database.PublicPositionsUpdate
+	// Additional field for WHERE clause
+	WherePositionEndHeight int64 `json:"position_end_height_where"`
+}
+
+// Factory functions for position cleanup operations
+func NewPositionDeleteByStartHeight(blockNumber int64) database.CleanupOperation {
+	return database.CleanupOperation{
+		Type:  database.CleanupDelete,
+		Table: "positions",
+		Data: PositionDeleteByStartHeight{
+			PublicPositionsSelect: database.PublicPositionsSelect{
+				PositionStartHeight: blockNumber,
+			},
+		},
+		Filter: []string{"position_start_height_where"},
+	}
+}
+
+func NewPositionUpdateByEndHeight(blockNumber int64) database.CleanupOperation {
+	falseValue := false
+	var nilInt64 *int64
+	var nilString *string
+
+	return database.CleanupOperation{
+		Type:  database.CleanupUpdate,
+		Table: "positions",
+		Data: PositionUpdateByEndHeight{
+			PublicPositionsUpdate: database.PublicPositionsUpdate{
+				IsTerminated:            &falseValue,
+				PositionEndHeight:       nilInt64,
+				WithdrawReceiverAddress: nilString,
+			},
+			WherePositionEndHeight: blockNumber,
+		},
+		Filter: []string{"position_end_height_where"},
+	}
+}
+
+func (p *PositionTransformer) ReorgCleanupQuery(blockNumber int64) []database.CleanupOperation {
+	return []database.CleanupOperation{
+		NewPositionDeleteByStartHeight(blockNumber),
+		NewPositionUpdateByEndHeight(blockNumber),
 	}
 }

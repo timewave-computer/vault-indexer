@@ -209,14 +209,14 @@ func (t *Transformer) processBatch(events []database.PublicEventsSelect) error {
 		}
 
 		for _, op := range dbOperations.updates {
-			if err := t.updateInTable(tx, op.table, op.data); err != nil {
+			if err := t.updateByIdInTable(tx, op.table, op.data); err != nil {
 				t.logger.Error("Error updating table %v: %v, data: %v", op.table, err, op.data)
 				tx.Rollback()
 				return err
 			}
 		}
 
-		if err := t.updateInTable(tx, "events", eventUpdate); err != nil {
+		if err := t.updateByIdInTable(tx, "events", eventUpdate); err != nil {
 			t.logger.Error("Error updating event: %v", err)
 			tx.Rollback()
 			return err
@@ -324,7 +324,7 @@ func (t *Transformer) insertToTable(tx *sql.Tx, table string, data any) error {
 	return nil
 }
 
-func (t *Transformer) updateInTable(tx *sql.Tx, table string, data any) error {
+func (t *Transformer) updateByIdInTable(tx *sql.Tx, table string, data any) error {
 	t.logger.Debug("Building update for table: %v, data: %v", table, data)
 	query, args, err := dbutil.BuildUpdate(table, data, []string{"id"})
 	if err != nil {
@@ -358,7 +358,7 @@ func (t *Transformer) handleCleanupFromBlock(blockNumber int64, pgdb *sql.DB) er
 	t.logger.Info("Cleaning up from block: %v", blockNumber)
 
 	transformersArr := []interface {
-		CleanupFromBlock() []string
+		ReorgCleanupQuery(blockNumber int64) []database.CleanupOperation
 	}{
 		t.withdrawRequestTransformer,
 		t.rateUpdateTransformer,
@@ -373,15 +373,23 @@ func (t *Transformer) handleCleanupFromBlock(blockNumber int64, pgdb *sql.DB) er
 	}
 
 	for _, transformer := range transformersArr {
-		sqls := transformer.CleanupFromBlock()
-		for _, sql := range sqls {
-			_, err := tx.Exec(sql, blockNumber)
+		operations := transformer.ReorgCleanupQuery(blockNumber)
+		for _, operation := range operations {
+			t.logger.Info("Building cleanup query for %v", operation)
+			query, args, err := dbutil.BuildCleanupQuery(operation)
 			if err != nil {
 				tx.Rollback()
-				t.logger.Error("failed to handle cleanup for %v: %v", transformer, err)
-				return fmt.Errorf("failed to handle cleanup for %v: %v", transformer, err)
+				t.logger.Error("failed to build cleanup query for %v: %v", transformer, err)
+				return fmt.Errorf("failed to build cleanup query for %v: %v", transformer, err)
 			}
-			t.logger.Info("Successfully executed cleanup sql: %v", sql)
+
+			_, err = tx.Exec(query, args...)
+			if err != nil {
+				tx.Rollback()
+				t.logger.Error("failed to execute cleanup for %v: %v", transformer, err)
+				return fmt.Errorf("failed to execute cleanup for %v: %v", transformer, err)
+			}
+			t.logger.Info("Successfully executed cleanup query: %v with args: %v", query, args)
 		}
 	}
 
