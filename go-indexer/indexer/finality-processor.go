@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"strconv"
 	"sync"
@@ -24,6 +25,7 @@ type FinalityProcessor struct {
 	once         sync.Once
 	wg           sync.WaitGroup
 	reorgChannel chan ReorgEvent
+	errorChannel chan error
 }
 
 type ReorgEvent struct {
@@ -32,7 +34,7 @@ type ReorgEvent struct {
 	BlockTag    string
 }
 
-func NewFinalityProcessor(ethClient *ethclient.Client, db *supa.Client) *FinalityProcessor {
+func NewFinalityProcessor(ethClient *ethclient.Client, db *supa.Client, errorChannel chan error) *FinalityProcessor {
 	logger := logger.NewLogger("FinalityProcessor")
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -44,6 +46,7 @@ func NewFinalityProcessor(ethClient *ethclient.Client, db *supa.Client) *Finalit
 		cancel:       cancel,
 		wg:           sync.WaitGroup{},
 		reorgChannel: make(chan ReorgEvent, 10),
+		errorChannel: errorChannel,
 	}
 }
 
@@ -164,7 +167,16 @@ func (f *FinalityProcessor) Start() error {
 func (f *FinalityProcessor) Stop() {
 	f.once.Do(func() {
 		f.logger.Info("Stopping finality processor...")
+		// write to error channel
+
+		select {
+		case f.errorChannel <- fmt.Errorf("finality processor stopped"):
+		default:
+			// Channel is closed or full, ignore
+		}
+
 		f.cancel()
+
 	})
 }
 

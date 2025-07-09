@@ -30,6 +30,7 @@ type Transformer struct {
 	positionTransformer        *transformers.PositionTransformer
 	withdrawRequestTransformer *transformers.WithdrawRequestTransformer
 	rateUpdateTransformer      *transformers.RateUpdateTransformer
+	errorChannel               chan error
 
 	// Add retry tracking
 	retryCount    int
@@ -45,9 +46,9 @@ type Transformer struct {
 }
 
 // NewTransformer creates a new transformer instance
-func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client) (*Transformer, error) {
-	ctx, cancel := context.WithCancel(context.Background())
+func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client, errorChannel chan error) (*Transformer, error) {
 
+	ctx, cancel := context.WithCancel(context.Background())
 	// Configure connection pool
 	pgdb.SetMaxOpenConns(1) // positions must be processed sequentially, parallel processing is not supported here
 	pgdb.SetConnMaxLifetime(5 * time.Minute)
@@ -78,7 +79,7 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client
 		ctx:                        ctx,
 		cancel:                     cancel,
 		logger:                     logger.NewLogger("Transformer"),
-		maxRetries:                 5,
+		maxRetries:                 2,
 		lastError:                  nil,
 		retryCount:                 0,
 		transformHandler:           transformHandler,
@@ -265,8 +266,8 @@ func (t *Transformer) handleError(err error) {
 		t.retryCount++
 		t.logger.Debug("Incrementing retry count: %v", t.retryCount)
 		if t.retryCount >= t.maxRetries {
-			t.logger.Error("FAILURE: Max retries (%d) reached for error: %v. Halting the transformer.", t.maxRetries, err)
-			t.cancel()
+			t.logger.Error("FAILURE: Max retries (%d) reached for error: %v. Stopping the transformer.", t.maxRetries, err)
+			t.Stop()
 			return
 		}
 	} else {
@@ -375,6 +376,13 @@ func (t *Transformer) WaitHalted(timeout time.Duration) bool {
 func (t *Transformer) Stop() {
 	t.once.Do(func() {
 		t.logger.Info("Stopping transformer...")
+
+		select {
+		case t.errorChannel <- fmt.Errorf("transformer stopped"):
+		default:
+			// Channel is closed or full, ignore
+		}
+
 		t.cancel()
 		t.wg.Wait()
 

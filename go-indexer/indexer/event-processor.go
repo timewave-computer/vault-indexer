@@ -21,12 +21,12 @@ type EventProcessor struct {
 	wg                    sync.WaitGroup
 	logger                *logger.Logger
 	requiredConfirmations uint64
+	errorChannel          chan error
 }
 
 // NewEventProcessor creates a new event processor instance
-func NewEventProcessor(eventQueue *event_queue.EventQueue, extractor *Extractor, ethClient *ethclient.Client, requiredConfirmations uint64) *EventProcessor {
+func NewEventProcessor(eventQueue *event_queue.EventQueue, extractor *Extractor, ethClient *ethclient.Client, requiredConfirmations uint64, errorChannel chan error) *EventProcessor {
 	ctx, cancel := context.WithCancel(context.Background())
-
 	return &EventProcessor{
 		eventQueue:            eventQueue,
 		extractor:             extractor,
@@ -35,6 +35,7 @@ func NewEventProcessor(eventQueue *event_queue.EventQueue, extractor *Extractor,
 		cancel:                cancel,
 		logger:                logger.NewLogger("EventProcessor"),
 		requiredConfirmations: requiredConfirmations,
+		errorChannel:          errorChannel,
 	}
 }
 
@@ -136,6 +137,13 @@ func (ep *EventProcessor) Start() error {
 func (ep *EventProcessor) Stop() {
 	ep.logger.Info("Stopping event processor...")
 
+	// write to error channel
+	select {
+	case ep.errorChannel <- fmt.Errorf("event processor stopped"):
+	default:
+		// Channel is closed or full, ignore
+	}
+
 	// Cancel context
 	ep.cancel()
 
@@ -143,4 +151,5 @@ func (ep *EventProcessor) Stop() {
 	ep.wg.Wait()
 
 	ep.logger.Info("Event processor stopped")
+
 }

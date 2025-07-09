@@ -60,9 +60,11 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 
 	eventQueue := event_queue.NewEventQueue()
 
-	eventProcessor := NewEventProcessor(eventQueue, extractor, ethClient, 4)
+	errorChan := make(chan error, 10)
 
-	finalityProcessor := NewFinalityProcessor(ethClient, supabaseClient)
+	eventProcessor := NewEventProcessor(eventQueue, extractor, ethClient, 4, errorChan)
+
+	finalityProcessor := NewFinalityProcessor(ethClient, supabaseClient, errorChan)
 
 	postgresClient, err := sql.Open("postgres", cfg.Database.PostgresConnectionString)
 	if err != nil {
@@ -71,7 +73,7 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	}
 	indexerLogger.Info("Connected to pgdb")
 
-	transformer, err := NewTransformer(supabaseClient, postgresClient, ethClient)
+	transformer, err := NewTransformer(supabaseClient, postgresClient, ethClient, errorChan)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to create transformer: %w", err)
@@ -94,7 +96,7 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 		finalityProcessor:     finalityProcessor,
 		eventQueue:            eventQueue,
 		requiredConfirmations: 4,
-		errorChan:             make(chan error),
+		errorChan:             errorChan,
 		reorgChan:             make(chan ReorgEvent),
 		processWg:             sync.WaitGroup{},
 		eventProcessor:        eventProcessor,
@@ -105,7 +107,25 @@ func (i *Indexer) Start() error {
 	i.logger.Info("Indexer started")
 
 	// Start centralized error and reorg event handler
-	i.startErrorAndReorgMonitoring()
+	i.processWg.Add(1)
+	go func() {
+		defer i.processWg.Done()
+		for {
+			select {
+			case <-i.errorChan:
+				i.logger.Error("Error received, stopping indexer")
+				i.Stop()
+				return
+			case reorgEvent := <-i.reorgChan:
+				i.logger.Error("Reorg event received: %+v", reorgEvent)
+				i.handleReorg(reorgEvent)
+				return
+			case <-i.ctx.Done():
+				// context cancelled, stop listening for events
+				return
+			}
+		}
+	}()
 
 	if err := i.healthServer.Start(); err != nil {
 		return fmt.Errorf("failed to start health check server: %w", err)
@@ -165,71 +185,71 @@ func (i *Indexer) Start() error {
 		return fmt.Errorf("failed to start transformer: %w", err)
 	}
 
-	// Monitor child processes and stop indexer if any of them stop
-	i.processWg.Add(1)
-	go func() {
-		defer i.processWg.Done()
-		select {
-		case <-i.eventProcessor.ctx.Done():
-			i.logger.Warn("Event processor context cancelled, stopping indexer")
-			select {
-			case i.errorChan <- fmt.Errorf("event processor stopped"):
-			default:
-				// Channel is closed or full, ignore
-			}
+	// // Monitor child processes and stop indexer if any of them stop
+	// i.processWg.Add(1)
+	// go func() {
+	// 	defer i.processWg.Done()
+	// 	select {
+	// 	case <-i.eventProcessor.ctx.Done():
+	// 		i.logger.Warn("Event processor context cancelled, stopping indexer")
+	// 		select {
+	// 		case i.errorChan <- fmt.Errorf("event processor stopped"):
+	// 		default:
+	// 			// Channel is closed or full, ignore
+	// 		}
 
-		}
-	}()
+	// 	}
+	// }()
 
-	i.processWg.Add(1)
-	go func() {
-		defer i.processWg.Done()
-		select {
-		case <-i.transformer.ctx.Done():
-			i.logger.Warn("Transformer context cancelled, stopping indexer")
-			select {
-			case i.errorChan <- fmt.Errorf("transformer stopped"):
-			default:
-				// Channel is closed or full, ignore
-			}
-		default:
-		}
-	}()
+	// i.processWg.Add(1)
+	// go func() {
+	// 	defer i.processWg.Done()
+	// 	select {
+	// 	case <-i.transformer.ctx.Done():
+	// 		i.logger.Warn("Transformer context cancelled, stopping indexer")
+	// 		select {
+	// 		case i.errorChan <- fmt.Errorf("transformer stopped"):
+	// 		default:
+	// 			// Channel is closed or full, ignore
+	// 		}
+	// 	default:
+	// 	}
+	// }()
 
-	i.processWg.Add(1)
-	go func() {
-		defer i.processWg.Done()
-		select {
-		case <-i.finalityProcessor.ctx.Done():
-			i.logger.Warn("Finality processor context cancelled, stopping indexer")
-			select {
-			case i.errorChan <- fmt.Errorf("finality processor stopped"):
-			default:
-				// Channel is closed or full, ignore
-			}
-		default:
-		}
-	}()
+	// i.processWg.Add(1)
+	// go func() {
+	// 	defer i.processWg.Done()
+	// 	select {
+	// 	case <-i.finalityProcessor.ctx.Done():
+	// 		i.logger.Warn("Finality processor context cancelled, stopping indexer")
+	// 		select {
+	// 		case i.errorChan <- fmt.Errorf("finality processor stopped"):
+	// 		default:
+	// 			// Channel is closed or full, ignore
+	// 		}
+	// 	default:
+	// 	}
+	// }()
 
-	// Monitor reorg events from finality processor
-	i.processWg.Add(1)
-	go func() {
-		defer i.processWg.Done()
-		for {
-			select {
-			case reorgEvent := <-i.finalityProcessor.ReorgChannel():
-				i.logger.Info("Reorg event received from finality processor: %+v", reorgEvent)
-				select {
-				case i.reorgChan <- reorgEvent:
-					i.logger.Info("Reorg event forwarded to main event handler")
-				default:
-					i.logger.Warn("Reorg channel is full, dropping event")
-				}
-			case <-i.ctx.Done():
-				return
-			}
-		}
-	}()
+	// // Monitor reorg events from finality processor
+	// i.processWg.Add(1)
+	// go func() {
+	// 	defer i.processWg.Done()
+	// 	for {
+	// 		select {
+	// 		case reorgEvent := <-i.finalityProcessor.reorgChannel:
+	// 			i.logger.Info("Reorg event received from finality processor: %+v", reorgEvent)
+	// 			select {
+	// 			case i.reorgChan <- reorgEvent:
+	// 				i.logger.Info("Reorg event forwarded to main event handler")
+	// 			default:
+	// 				i.logger.Warn("Reorg channel is full, dropping event")
+	// 			}
+	// 		case <-i.ctx.Done():
+	// 			return
+	// 		}
+	// 	}
+	// }()
 
 	// Wait for context cancellation or stop signal
 	select {
@@ -251,13 +271,14 @@ func (i *Indexer) Stop() error {
 			i.logger.Error("Error stopping health check server: %v", err)
 		}
 
-		// Cancel context to stop all child processes
-		i.cancel()
-
-		// Stop child processes
+		// Stop child processes BEFORE canceling context
+		// This allows the error handling goroutine to process any shutdown errors
 		i.extractor.Stop()
 		i.transformer.Stop()
 		i.finalityProcessor.Stop()
+
+		// Now cancel context to stop all child processes
+		i.cancel()
 
 		// Wait for all process monitoring goroutines to finish
 		i.processWg.Wait()
@@ -273,24 +294,4 @@ func (i *Indexer) Stop() error {
 		os.Exit(1)
 	})
 	return nil
-}
-
-func (i *Indexer) startErrorAndReorgMonitoring() {
-	go func() {
-		for {
-			select {
-			case err := <-i.errorChan:
-				i.logger.Error("Error received: %v", err)
-				i.Stop()
-				return
-			case reorgEvent := <-i.reorgChan:
-				i.logger.Error("Reorg event received: %+v", reorgEvent)
-				i.handleReorg(reorgEvent)
-				return
-			case <-i.ctx.Done():
-				// context cancelled, stop listening for events
-				return
-			}
-		}
-	}()
 }
