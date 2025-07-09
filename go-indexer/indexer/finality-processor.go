@@ -2,7 +2,6 @@ package indexer
 
 import (
 	"context"
-	"fmt"
 	"math/big"
 	"strconv"
 	"sync"
@@ -25,7 +24,7 @@ type FinalityProcessor struct {
 	once         sync.Once
 	wg           sync.WaitGroup
 	reorgChannel chan ReorgEvent
-	errorChannel chan error
+	haltManager  *HaltManager
 }
 
 type ReorgEvent struct {
@@ -34,9 +33,9 @@ type ReorgEvent struct {
 	BlockTag    string
 }
 
-func NewFinalityProcessor(ethClient *ethclient.Client, db *supa.Client, errorChannel chan error) *FinalityProcessor {
+func NewFinalityProcessor(ethClient *ethclient.Client, db *supa.Client, ctx context.Context, haltManager *HaltManager) *FinalityProcessor {
 	logger := logger.NewLogger("FinalityProcessor")
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 
 	return &FinalityProcessor{
 		logger:       logger,
@@ -46,7 +45,7 @@ func NewFinalityProcessor(ethClient *ethclient.Client, db *supa.Client, errorCha
 		cancel:       cancel,
 		wg:           sync.WaitGroup{},
 		reorgChannel: make(chan ReorgEvent, 10),
-		errorChannel: errorChannel,
+		haltManager:  haltManager,
 	}
 }
 
@@ -61,7 +60,7 @@ func (f *FinalityProcessor) Start() error {
 			select {
 			case err := <-errors:
 				f.logger.Error("Error in finality processor: %v", err)
-				f.cancel()
+				f.Stop()
 				return
 			case <-f.ctx.Done():
 				// context cancelled, stop listening for errors
@@ -70,12 +69,16 @@ func (f *FinalityProcessor) Start() error {
 		}
 	}()
 
+	f.wg.Add(1)
 	go func() {
-
+		defer f.wg.Done()
 		for {
-
 			select {
 			case <-f.ctx.Done():
+				return
+			case <-f.haltManager.HaltChannel():
+				// halt requested, stop processing
+				f.logger.Info("Halted, exiting cycle")
 				return
 			default:
 
@@ -167,13 +170,6 @@ func (f *FinalityProcessor) Start() error {
 func (f *FinalityProcessor) Stop() {
 	f.once.Do(func() {
 		f.logger.Info("Stopping finality processor...")
-		// write to error channel
-
-		select {
-		case f.errorChannel <- fmt.Errorf("finality processor stopped"):
-		default:
-			// Channel is closed or full, ignore
-		}
 
 		f.cancel()
 

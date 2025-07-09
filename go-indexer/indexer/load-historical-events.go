@@ -46,7 +46,7 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 				if err != nil {
 					// Use centralized error channel
 					select {
-					case i.errorChan <- fmt.Errorf("failed to get last indexed block: %w, event: %s, contract: %s", err, event.Name, contractConfig.Address):
+					case i.eventIngestionErrorChan <- fmt.Errorf("failed to get last indexed block: %w, event: %s, contract: %s", err, event.Name, contractConfig.Address):
 					default:
 						// Channel is closed or full, ignore
 					}
@@ -73,7 +73,7 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 				if err != nil {
 					// Use centralized error channel
 					select {
-					case i.errorChan <- fmt.Errorf("failed to get historical events: %w, event: %s, contract: %s", err, event.Name, contractConfig.Address):
+					case i.eventIngestionErrorChan <- fmt.Errorf("failed to get historical events: %w, event: %s, contract: %s", err, event.Name, contractConfig.Address):
 					default:
 						// Channel is closed or full, ignore
 					}

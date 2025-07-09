@@ -12,20 +12,18 @@ import (
 func (i *Indexer) handleReorg(reorgEvent ReorgEvent) {
 	i.logger.Info("Handling reorg event: %+v", reorgEvent)
 
-	// 1. Stop all child processes
-	i.logger.Info("Stopping all child processes due to reorg...")
-	i.extractor.Stop()
-	// must halt so it stops processing, but use the methods to update the database
-	i.transformer.Halt()
-	isHalted := i.transformer.WaitHalted(120 * time.Second)
+	// 1. Stop all child processes using shared halt manager
+	i.logger.Info("Halting all child processes due to reorg...")
+	i.haltManager.Halt()
+
+	// Wait for all processors to halt
+	isHalted := i.haltManager.WaitHalted(120 * time.Second)
 	if !isHalted {
-		i.logger.Error("Transformer did not pause in time")
+		i.logger.Error("Processors did not halt in time")
 		i.Stop()
 		return
 	}
-
-	i.logger.Info("Transformer halted")
-	i.finalityProcessor.Stop()
+	i.logger.Info("All processors halted")
 
 	// 2. Clear the event queue
 	i.logger.Info("Clearing event queue due to reorg...")
@@ -33,7 +31,6 @@ func (i *Indexer) handleReorg(reorgEvent ReorgEvent) {
 
 	// 3. Stop the event processor
 	i.logger.Info("Stopping event processor due to reorg...")
-	i.eventProcessor.Stop()
 
 	// 3. Execute cleanup logic
 	i.logger.Info("Finding last consistent block before block number: %d", reorgEvent.BlockNumber)

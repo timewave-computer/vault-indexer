@@ -1,7 +1,6 @@
 package indexer
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -20,25 +19,19 @@ import (
 type Extractor struct {
 	db     *supa.Client
 	client *ethclient.Client
-	ctx    context.Context
-	cancel context.CancelFunc
+
 	logger *logger.Logger
 }
 
 // NewExtractor creates a new event processor
 func NewExtractor(db *supa.Client, client *ethclient.Client) *Extractor {
-	ctx, cancel := context.WithCancel(context.Background())
+
 	return &Extractor{
 		db:     db,
 		client: client,
-		ctx:    ctx,
-		cancel: cancel,
+
 		logger: logger.NewLogger("EventProcessor"),
 	}
-}
-
-func (e *Extractor) Stop() {
-	e.cancel()
 }
 
 func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event) error {

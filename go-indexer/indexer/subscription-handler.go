@@ -44,7 +44,7 @@ func (i *Indexer) setupSubscriptions(wg *sync.WaitGroup) error {
 					if err != nil {
 						// Use centralized error channel
 						select {
-						case i.errorChan <- fmt.Errorf("failed to subscribe to event %s for contract %s: %w", event.Name, contract.Address, err):
+						case i.eventIngestionErrorChan <- fmt.Errorf("failed to subscribe to event %s for contract %s: %w", event.Name, contract.Address, err):
 						default:
 							// Channel is closed or full, ignore
 						}
