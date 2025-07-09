@@ -4,55 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/supabase-community/postgrest-go"
-	supa "github.com/supabase-community/supabase-go"
-	"github.com/timewave/vault-indexer/go-indexer/database"
+
 	"github.com/timewave/vault-indexer/go-indexer/logger"
 )
-
-// GetNearestIngestedEvent retrieves the nearest ingested event for a given block number
-func GetNearestIngestedEvent(db *supa.Client, blockNumber int64) (*database.PublicEventsSelect, error) {
-	if blockNumber == 0 {
-		var nearestEvents []database.PublicEventsSelect
-
-		_, err := db.From("events").Select("block_number, block_hash", "", false).
-			Lte("block_number", strconv.FormatInt(blockNumber, 10)).
-			Limit(1, "").
-			Order("block_number", &postgrest.OrderOpts{Ascending: false}).
-			ExecuteTo(&nearestEvents)
-
-		if err != nil {
-			return nil, err
-		}
-		if len(nearestEvents) == 0 {
-			return nil, nil
-		}
-
-		return &nearestEvents[0], nil
-	} else {
-		var mostRecentEvents []database.PublicEventsSelect
-
-		_, err := db.From("events").Select("block_number, block_hash", "", false).
-			Limit(1, "").
-			Lte("block_number", strconv.FormatInt(blockNumber, 10)).
-			Order("block_number", &postgrest.OrderOpts{Ascending: false}).
-			ExecuteTo(&mostRecentEvents)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(mostRecentEvents) == 0 {
-			return nil, nil
-		}
-
-		return &mostRecentEvents[0], nil
-	}
-}
 
 // CheckCanonicalBlock fetches a block by hash and compares its block number
 func CheckCanonicalBlock(ethClient *ethclient.Client, logger *logger.Logger, blockNumber int64, blockHash string) (bool, error) {

@@ -17,25 +17,25 @@ import (
 
 // Indexer handles blockchain event indexing and position tracking
 type Indexer struct {
-	config                *config.Config
-	ethClient             *ethclient.Client
-	supabaseClient        *supa.Client
-	ctx                   context.Context
-	cancel                context.CancelFunc
-	postgresClient        *sql.DB
-	extractor             *Extractor
-	transformer           *Transformer
-	logger                *logger.Logger
-	healthServer          *health.Server
-	eventQueue            *event_queue.EventQueue
-	requiredConfirmations uint64
-	finalityProcessor     *FinalityProcessor
-	once                  sync.Once
-	errorChan             chan error
-	reorgChan             chan ReorgEvent
-	processWg             sync.WaitGroup
-	eventProcessor        *EventProcessor
-	reorgHandler          *ReorgHandler
+	config                  *config.Config
+	ethClient               *ethclient.Client
+	supabaseClient          *supa.Client
+	ctx                     context.Context
+	cancel                  context.CancelFunc
+	postgresClient          *sql.DB
+	extractor               *Extractor
+	transformer             *Transformer
+	logger                  *logger.Logger
+	healthServer            *health.Server
+	eventQueue              *event_queue.EventQueue
+	requiredConfirmations   uint64
+	finalityProcessor       *FinalityProcessor
+	once                    sync.Once
+	eventIngestionErrorChan chan error
+	reorgChan               chan ReorgEvent
+	processWg               sync.WaitGroup
+	eventProcessor          *EventProcessor
+	haltManager             *HaltManager
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
@@ -61,11 +61,17 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 
 	eventQueue := event_queue.NewEventQueue()
 
-	eventProcessor := NewEventProcessor(eventQueue, extractor, ethClient, 4)
+	errorChan := make(chan error, 10)
 
-	finalityProcessor := NewFinalityProcessor(ethClient, supabaseClient)
+	// Create shared halt manager
+	haltManager := NewHaltManager()
 
-	reorgHandler := NewReorgHandler(ethClient, supabaseClient)
+	eventProcessor := NewEventProcessor(eventQueue, extractor, ethClient, 4, ctx, haltManager)
+
+	// Create reorg channel first
+	reorgChan := make(chan ReorgEvent)
+
+	finalityProcessor := NewFinalityProcessor(ethClient, supabaseClient, ctx, haltManager, reorgChan)
 
 	postgresClient, err := sql.Open("postgres", cfg.Database.PostgresConnectionString)
 	if err != nil {
@@ -74,7 +80,7 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	}
 	indexerLogger.Info("Connected to pgdb")
 
-	transformer, err := NewTransformer(supabaseClient, postgresClient, ethClient)
+	transformer, err := NewTransformer(supabaseClient, postgresClient, ethClient, ctx, haltManager)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to create transformer: %w", err)
@@ -84,24 +90,24 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	healthServer := health.NewServer(8080, "indexer") // Default port for indexer health checks
 
 	return &Indexer{
-		config:                cfg,
-		postgresClient:        postgresClient,
-		ethClient:             ethClient,
-		supabaseClient:        supabaseClient,
-		ctx:                   ctx,
-		cancel:                cancel,
-		extractor:             extractor,
-		transformer:           transformer,
-		logger:                indexerLogger,
-		healthServer:          healthServer,
-		finalityProcessor:     finalityProcessor,
-		eventQueue:            eventQueue,
-		requiredConfirmations: 4,
-		errorChan:             make(chan error),
-		reorgChan:             make(chan ReorgEvent),
-		processWg:             sync.WaitGroup{},
-		eventProcessor:        eventProcessor,
-		reorgHandler:          reorgHandler,
+		config:                  cfg,
+		postgresClient:          postgresClient,
+		ethClient:               ethClient,
+		supabaseClient:          supabaseClient,
+		ctx:                     ctx,
+		cancel:                  cancel,
+		extractor:               extractor,
+		transformer:             transformer,
+		logger:                  indexerLogger,
+		healthServer:            healthServer,
+		finalityProcessor:       finalityProcessor,
+		eventQueue:              eventQueue,
+		requiredConfirmations:   4,
+		eventIngestionErrorChan: errorChan,
+		reorgChan:               reorgChan,
+		processWg:               sync.WaitGroup{},
+		eventProcessor:          eventProcessor,
+		haltManager:             haltManager,
 	}, nil
 }
 
@@ -109,7 +115,26 @@ func (i *Indexer) Start() error {
 	i.logger.Info("Indexer started")
 
 	// Start centralized error and reorg event handler
-	i.startErrorAndReorgMonitoring()
+	i.processWg.Add(1)
+	go func() {
+		defer i.processWg.Done()
+		for {
+			select {
+			case reorgEvent := <-i.reorgChan:
+				i.logger.Error("Reorg event received: %+v", reorgEvent)
+				i.handleReorg(reorgEvent)
+				return
+			case err := <-i.eventIngestionErrorChan:
+				i.logger.Error("Event ingestion error received: %v", err)
+				// Handle the error - you might want to stop the indexer or take other action
+				i.Stop()
+				return
+			case <-i.ctx.Done():
+				// context cancelled, stop listening for events
+				return
+			}
+		}
+	}()
 
 	if err := i.healthServer.Start(); err != nil {
 		return fmt.Errorf("failed to start health check server: %w", err)
@@ -173,81 +198,35 @@ func (i *Indexer) Start() error {
 	i.processWg.Add(1)
 	go func() {
 		defer i.processWg.Done()
+
+		// Wait for any process to stop
 		select {
 		case <-i.eventProcessor.ctx.Done():
-			i.logger.Warn("Event processor context cancelled, stopping indexer")
-			select {
-			case i.errorChan <- fmt.Errorf("event processor stopped"):
-			default:
-				// Channel is closed or full, ignore
-			}
-
-		}
-	}()
-
-	i.processWg.Add(1)
-	go func() {
-		defer i.processWg.Done()
-		select {
+			i.logger.Info("Error in event ingestion, stopping indexer")
+			i.Stop()
 		case <-i.transformer.ctx.Done():
-			i.logger.Warn("Transformer context cancelled, stopping indexer")
-			select {
-			case i.errorChan <- fmt.Errorf("transformer stopped"):
-			default:
-				// Channel is closed or full, ignore
-			}
-		default:
-		}
-	}()
-
-	i.processWg.Add(1)
-	go func() {
-		defer i.processWg.Done()
-		select {
+			i.logger.Info("Event processor stopped, stopping indexer")
+			i.Stop()
+		case <-i.transformer.ctx.Done():
+			i.logger.Info("Transformer stopped, stopping indexer")
+			i.Stop()
 		case <-i.finalityProcessor.ctx.Done():
-			i.logger.Warn("Finality processor context cancelled, stopping indexer")
-			select {
-			case i.errorChan <- fmt.Errorf("finality processor stopped"):
-			default:
-				// Channel is closed or full, ignore
-			}
-		default:
-		}
-	}()
-
-	// Monitor reorg events from finality processor
-	i.processWg.Add(1)
-	go func() {
-		defer i.processWg.Done()
-		for {
-			select {
-			case reorgEvent := <-i.finalityProcessor.ReorgChannel():
-				i.logger.Info("Reorg event received from finality processor: %+v", reorgEvent)
-				select {
-				case i.reorgChan <- reorgEvent:
-					i.logger.Info("Reorg event forwarded to main event handler")
-				default:
-					i.logger.Warn("Reorg channel is full, dropping event")
-				}
-			case <-i.ctx.Done():
-				return
-			}
+			i.logger.Info("Finality processor stopped, stopping indexer")
+			i.Stop()
 		}
 	}()
 
 	// Wait for context cancellation or stop signal
-	select {
-	case <-i.ctx.Done():
-		i.logger.Info("Context cancelled, shutting down indexer...")
-		i.Stop()
-	}
+	<-i.ctx.Done()
+	i.logger.Info("Context cancelled, shutting down indexer...")
+	i.Stop()
 
 	return nil
 }
 
 func (i *Indexer) Stop() error {
 	i.once.Do(func() {
-		i.logger.Info("Stopping indexer...")
+		i.logger.Info("Starting shutdown of indexer...")
 		i.healthServer.SetStatus("unhealthy")
 
 		// Stop health check server
@@ -255,19 +234,10 @@ func (i *Indexer) Stop() error {
 			i.logger.Error("Error stopping health check server: %v", err)
 		}
 
-		// Cancel context to stop all child processes
 		i.cancel()
 
-		// Stop child processes
-		i.extractor.Stop()
-		i.transformer.Stop()
-		i.finalityProcessor.Stop()
-
-		// Wait for all process monitoring goroutines to finish
-		i.processWg.Wait()
-
 		// Close error channel
-		close(i.errorChan)
+		close(i.eventIngestionErrorChan)
 
 		// Finally release external resources
 		i.ethClient.Close()
@@ -277,24 +247,4 @@ func (i *Indexer) Stop() error {
 		os.Exit(1)
 	})
 	return nil
-}
-
-func (i *Indexer) startErrorAndReorgMonitoring() {
-	go func() {
-		for {
-			select {
-			case err := <-i.errorChan:
-				i.logger.Error("Error received: %v", err)
-				i.Stop()
-				return
-			case reorgEvent := <-i.reorgChan:
-				i.logger.Error("Reorg event received: %+v", reorgEvent)
-				i.handleReorg(reorgEvent)
-				return
-			case <-i.ctx.Done():
-				// context cancelled, stop listening for events
-				return
-			}
-		}
-	}()
 }

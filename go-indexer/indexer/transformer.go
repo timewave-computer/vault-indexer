@@ -38,15 +38,14 @@ type Transformer struct {
 	lastErrorTime *time.Time
 	once          sync.Once
 
-	// Pause/resume support
-	haltCh   chan struct{}
-	isHalted bool
-	haltMu   sync.Mutex
+	// Shared halt manager
+	haltManager *HaltManager
 }
 
 // NewTransformer creates a new transformer instance
-func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client) (*Transformer, error) {
-	ctx, cancel := context.WithCancel(context.Background())
+func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client, ctx context.Context, haltManager *HaltManager) (*Transformer, error) {
+
+	ctx, cancel := context.WithCancel(ctx)
 
 	// Configure connection pool
 	pgdb.SetMaxOpenConns(1) // positions must be processed sequentially, parallel processing is not supported here
@@ -78,15 +77,14 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client
 		ctx:                        ctx,
 		cancel:                     cancel,
 		logger:                     logger.NewLogger("Transformer"),
-		maxRetries:                 5,
+		maxRetries:                 0,
 		lastError:                  nil,
 		retryCount:                 0,
 		transformHandler:           transformHandler,
 		positionTransformer:        positionTransformer,
 		withdrawRequestTransformer: withdrawRequestTransformer,
 		rateUpdateTransformer:      rateUpdateTransformer,
-		haltCh:                     make(chan struct{}, 1),
-		isHalted:                   false,
+		haltManager:                haltManager,
 	}, nil
 }
 
@@ -97,16 +95,15 @@ func (t *Transformer) Start() error {
 	t.wg.Add(1)
 	go func() {
 		defer t.wg.Done()
-		defer close(t.haltCh) // Signal that we've exited
 		for {
-
 			select {
-			case <-t.haltCh:
-				t.logger.Info("Transformer is halted")
+			case <-t.haltManager.HaltChannel():
+				t.logger.Info("Halted, exiting cycle")
 				return
 			case <-t.ctx.Done():
 				return
 			default:
+
 				// Query for unprocessed events outside of transaction
 				rows, err := t.pgdb.QueryContext(t.ctx, `
 					SELECT 
@@ -265,8 +262,8 @@ func (t *Transformer) handleError(err error) {
 		t.retryCount++
 		t.logger.Debug("Incrementing retry count: %v", t.retryCount)
 		if t.retryCount >= t.maxRetries {
-			t.logger.Error("FAILURE: Max retries (%d) reached for error: %v. Halting the transformer.", t.maxRetries, err)
-			t.cancel()
+			t.logger.Error("FAILURE: Max retries (%d) reached for error: %v. Stopping the transformer.", t.maxRetries, err)
+			t.Stop()
 			return
 		}
 	} else {
@@ -296,7 +293,7 @@ func (t *Transformer) handleError(err error) {
 // handleCleanupFromBlock handles the cleanup of the database from a given block number
 func (t *Transformer) handleCleanupFromBlock(blockNumber int64, pgdb *sql.DB) error {
 
-	if !t.isHalted {
+	if !t.haltManager.IsHalted() {
 		return fmt.Errorf("transformer is not halted, cannot safely do reorg cleanup")
 	}
 
@@ -347,40 +344,13 @@ func (t *Transformer) handleCleanupFromBlock(blockNumber int64, pgdb *sql.DB) er
 
 }
 
-// Halt halts the transformer processing
-// specifically for stopping processing to do reorg cleanup
-func (t *Transformer) Halt() {
-	t.haltMu.Lock()
-	defer t.haltMu.Unlock()
-	if !t.isHalted {
-		t.isHalted = true
-		// non-blocking send in case multiple Pause() calls
-		select {
-		case t.haltCh <- struct{}{}:
-		default:
-		}
-		t.logger.Info("Transformer halt requested")
-	}
-}
-func (t *Transformer) WaitHalted(timeout time.Duration) bool {
-	select {
-	case <-t.haltCh:
-		return true
-	case <-time.After(timeout):
-		return false
-	}
-}
-
 // Stop gracefully stops the transformer
 func (t *Transformer) Stop() {
 	t.once.Do(func() {
 		t.logger.Info("Stopping transformer...")
-		t.cancel()
-		t.wg.Wait()
 
-		if t.pgdb != nil {
-			t.pgdb.Close()
-		}
+		t.cancel()
+		t.logger.Info("Transformer ctx cancelled")
 	})
 }
 

@@ -21,12 +21,12 @@ type EventProcessor struct {
 	wg                    sync.WaitGroup
 	logger                *logger.Logger
 	requiredConfirmations uint64
+	haltManager           *HaltManager
 }
 
 // NewEventProcessor creates a new event processor instance
-func NewEventProcessor(eventQueue *event_queue.EventQueue, extractor *Extractor, ethClient *ethclient.Client, requiredConfirmations uint64) *EventProcessor {
-	ctx, cancel := context.WithCancel(context.Background())
-
+func NewEventProcessor(eventQueue *event_queue.EventQueue, extractor *Extractor, ethClient *ethclient.Client, requiredConfirmations uint64, ctx context.Context, haltManager *HaltManager) *EventProcessor {
+	ctx, cancel := context.WithCancel(ctx)
 	return &EventProcessor{
 		eventQueue:            eventQueue,
 		extractor:             extractor,
@@ -35,6 +35,7 @@ func NewEventProcessor(eventQueue *event_queue.EventQueue, extractor *Extractor,
 		cancel:                cancel,
 		logger:                logger.NewLogger("EventProcessor"),
 		requiredConfirmations: requiredConfirmations,
+		haltManager:           haltManager,
 	}
 }
 
@@ -71,7 +72,10 @@ func (ep *EventProcessor) Start() error {
 			case <-ep.ctx.Done():
 				// context cancelled, stop processing events
 				return
-
+			case <-ep.haltManager.HaltChannel():
+				// halt requested, stop processing events
+				ep.logger.Info("Halted, exiting cycle")
+				return
 			default:
 				// continue
 			}
@@ -143,4 +147,5 @@ func (ep *EventProcessor) Stop() {
 	ep.wg.Wait()
 
 	ep.logger.Info("Event processor stopped")
+
 }
