@@ -2,9 +2,12 @@ package indexer
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/supabase-community/postgrest-go"
 	"github.com/supabase-community/supabase-go"
+	"github.com/timewave/vault-indexer/go-indexer/database"
 	"github.com/timewave/vault-indexer/go-indexer/logger"
 )
 
@@ -58,7 +61,7 @@ func (r *ReorgHandler) findLastConsistentBlock(blockNumber int64) (int64, error)
 
 	fromBlock := blockNumber
 	for {
-		nearestIngestedEvent, err := GetNearestIngestedEvent(r.supabaseClient, fromBlock)
+		nearestIngestedEvent, err := r.getNearestIngestedEvent(fromBlock)
 		if err != nil {
 			return 0, err
 		}
@@ -79,4 +82,43 @@ func (r *ReorgHandler) findLastConsistentBlock(blockNumber int64) (int64, error)
 		fromBlock = nearestIngestedEvent.BlockNumber - 1
 	}
 
+}
+
+// GetNearestIngestedEvent retrieves the nearest ingested event for a given block number
+func (r *ReorgHandler) getNearestIngestedEvent(blockNumber int64) (*database.PublicEventsSelect, error) {
+	if blockNumber == 0 {
+		var nearestEvents []database.PublicEventsSelect
+
+		_, err := r.supabaseClient.From("events").Select("block_number, block_hash", "", false).
+			Lte("block_number", strconv.FormatInt(blockNumber, 10)).
+			Limit(1, "").
+			Order("block_number", &postgrest.OrderOpts{Ascending: false}).
+			ExecuteTo(&nearestEvents)
+
+		if err != nil {
+			return nil, err
+		}
+		if len(nearestEvents) == 0 {
+			return nil, nil
+		}
+
+		return &nearestEvents[0], nil
+	} else {
+		var mostRecentEvents []database.PublicEventsSelect
+
+		_, err := r.supabaseClient.From("events").Select("block_number, block_hash", "", false).
+			Limit(1, "").
+			Lte("block_number", strconv.FormatInt(blockNumber, 10)).
+			Order("block_number", &postgrest.OrderOpts{Ascending: false}).
+			ExecuteTo(&mostRecentEvents)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(mostRecentEvents) == 0 {
+			return nil, nil
+		}
+
+		return &mostRecentEvents[0], nil
+	}
 }

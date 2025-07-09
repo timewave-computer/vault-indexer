@@ -3,11 +3,13 @@ package indexer
 import (
 	"context"
 	"math/big"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/supabase-community/postgrest-go"
 	supa "github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/database"
 	"github.com/timewave/vault-indexer/go-indexer/logger"
@@ -92,20 +94,33 @@ func (f *FinalityProcessor) Start() error {
 
 					f.logger.Info("Current %s block: %d", blockTag, currentBlockNumber)
 
-					nearestIngestedEvent, err := GetNearestIngestedEvent(f.db, currentBlockNumber)
-					if nearestIngestedEvent == nil {
-						// no ingested events yet, wait for next iteration
-						f.logger.Info("No ingested events yet, waiting for next iteration")
-						time.Sleep(15 * time.Second)
-						continue
-					}
-					f.logger.Info("Nearest ingested %v event: %v hash: %v", blockTag, nearestIngestedEvent.BlockNumber, nearestIngestedEvent.BlockHash)
+					lastValidatedBlockNumber, err := f.getLastValidatedBlockNumber(blockTag)
 					if err != nil {
-						f.logger.Error("Error getting nearest ingested event: %v", err)
+						f.logger.Error("Error getting last validated block number: %v", err)
 						errors <- err
 						return
 					}
-					isCanonical, err := CheckCanonicalBlock(f.ethClient, f.logger, nearestIngestedEvent.BlockNumber, nearestIngestedEvent.BlockHash)
+
+					event, err := f.getNextEventToValidate(lastValidatedBlockNumber)
+					if err != nil {
+						f.logger.Error("Error getting next event to validate: %v", err)
+						errors <- err
+						return
+					}
+					if event == nil {
+						// no next event to validate, wait for next iteration
+						f.logger.Info("No next event to validate, waiting 15 seconds for next iteration")
+						time.Sleep(15 * time.Second)
+						continue
+					}
+					f.logger.Info("Next event to validate: %v", event)
+					if event.BlockNumber < lastValidatedBlockNumber {
+						f.logger.Info("Next event to validate is less than last validated block number, waiting 15 seconds for next iteration")
+						time.Sleep(15 * time.Second)
+						continue
+					}
+
+					isCanonical, err := CheckCanonicalBlock(f.ethClient, f.logger, event.BlockNumber, event.BlockHash)
 					if err != nil {
 						f.logger.Error("Error checking if nearest ingested event is canonical: %v", err)
 						errors <- err
@@ -114,7 +129,7 @@ func (f *FinalityProcessor) Start() error {
 
 					if isCanonical {
 						// update last validated block number
-						err := f.updateLastValidatedBlockNumber(blockTag, nearestIngestedEvent.BlockNumber)
+						err := f.updateLastValidatedBlockNumber(blockTag, event.BlockNumber)
 						if err != nil {
 							f.logger.Error("Error updating last validated block number: %v", err)
 							errors <- err
@@ -123,11 +138,11 @@ func (f *FinalityProcessor) Start() error {
 						continue
 					} else {
 						// raise hell
-						f.logger.Error("Nearest ingested event does not match canonical block: %v, %v", nearestIngestedEvent.BlockNumber, nearestIngestedEvent.BlockHash)
+						f.logger.Error("Nearest ingested event does not match canonical block: %v, %v", event.BlockNumber, event.BlockHash)
 						// Send reorg event to reorgChannel
 						reorgEvent := ReorgEvent{
-							BlockNumber: nearestIngestedEvent.BlockNumber,
-							BlockHash:   nearestIngestedEvent.BlockHash,
+							BlockNumber: event.BlockNumber,
+							BlockHash:   event.BlockHash,
 							BlockTag:    blockTag,
 						}
 						select {
@@ -139,8 +154,6 @@ func (f *FinalityProcessor) Start() error {
 						return
 					}
 				}
-				time.Sleep(15 * time.Second)
-
 			}
 		}
 	}()
@@ -155,21 +168,39 @@ func (f *FinalityProcessor) Stop() {
 	})
 }
 
-func (f *FinalityProcessor) getLastValidatedBlockNumber(blockTag string) (database.PublicBlockFinalitySelect, error) {
+func (f *FinalityProcessor) getLastValidatedBlockNumber(blockTag string) (int64, error) {
 	var blockFinality []database.PublicBlockFinalitySelect
 	_, err := f.db.From("block_finality").Select("last_validated_block_number", "", false).Eq("block_tag", blockTag).ExecuteTo(&blockFinality)
 	if err != nil {
-		return database.PublicBlockFinalitySelect{}, err
+		return 0, err
 	}
 
 	if len(blockFinality) == 0 {
-		return database.PublicBlockFinalitySelect{
-			BlockTag:                 blockTag,
-			LastValidatedBlockNumber: 0,
-		}, nil
+		return 0, nil
 	}
 
-	return blockFinality[0], nil
+	lastValidatedBlockNumber := blockFinality[0].LastValidatedBlockNumber
+
+	return lastValidatedBlockNumber, nil
+}
+
+func (f *FinalityProcessor) getNextEventToValidate(blockNumber int64) (*database.PublicEventsSelect, error) {
+
+	f.logger.Info("Getting next event to validate greater than block number: %v", blockNumber)
+	var nextEvents []database.PublicEventsSelect
+	_, err := f.db.From("events").Select("id,block_number, block_hash", "", false).Gt("block_number", strconv.FormatInt(blockNumber, 10)).Limit(1, "").
+		Order("block_number", &postgrest.OrderOpts{Ascending: true}).
+		ExecuteTo(&nextEvents)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(nextEvents) == 0 {
+		return nil, nil
+	}
+
+	return &nextEvents[0], nil
+
 }
 
 func (f *FinalityProcessor) updateLastValidatedBlockNumber(blockTag string, blockNumber int64) error {
