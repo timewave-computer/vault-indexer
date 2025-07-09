@@ -2,6 +2,7 @@ package eventTransformHandler
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/timewave/vault-indexer/go-indexer/database"
 	transformers "github.com/timewave/vault-indexer/go-indexer/transformers"
@@ -61,8 +62,8 @@ func (h *DepositHandler) Handle(event database.PublicEventsSelect, eventData dat
 
 	// Process position transformation
 	inserts, updates, err := h.positionTransformer.Deposit(transformers.ProcessPosition{
-		SenderAddress:   depositData.Sender,
-		ContractAddress: event.ContractAddress,
+		SenderAddress:   strings.ToLower(depositData.Sender),
+		ContractAddress: strings.ToLower(event.ContractAddress),
 		AmountShares:    depositData.AmountShares,
 		BlockNumber:     uint64(event.BlockNumber),
 	})

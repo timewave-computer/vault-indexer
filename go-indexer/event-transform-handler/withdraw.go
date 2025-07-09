@@ -3,6 +3,7 @@ package eventTransformHandler
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/timewave/vault-indexer/go-indexer/database"
 	transformers "github.com/timewave/vault-indexer/go-indexer/transformers"
@@ -76,9 +77,9 @@ func (h *WithdrawHandler) Handle(event database.PublicEventsSelect, eventData da
 
 	// Process position transformation
 	inserts, updates, err := h.positionTransformer.Withdraw(transformers.ProcessPosition{
-		ReceiverAddress: withdrawData.Receiver,
-		SenderAddress:   withdrawData.Owner,
-		ContractAddress: event.ContractAddress,
+		ReceiverAddress: strings.ToLower(withdrawData.Receiver),
+		SenderAddress:   strings.ToLower(withdrawData.Owner),
+		ContractAddress: strings.ToLower(event.ContractAddress),
 		AmountShares:    withdrawData.Amount,
 		BlockNumber:     uint64(event.BlockNumber),
 	})

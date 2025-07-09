@@ -2,6 +2,7 @@ package eventTransformHandler
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/timewave/vault-indexer/go-indexer/database"
 	transformers "github.com/timewave/vault-indexer/go-indexer/transformers"
@@ -60,9 +61,9 @@ func (h *TransferHandler) Handle(event database.PublicEventsSelect, eventData da
 	}
 
 	inserts, updates, err := h.positionTransformer.Transfer(transformers.ProcessPosition{
-		ReceiverAddress: transferData.To,
-		SenderAddress:   transferData.From,
-		ContractAddress: event.ContractAddress,
+		ReceiverAddress: strings.ToLower(transferData.To),
+		SenderAddress:   strings.ToLower(transferData.From),
+		ContractAddress: strings.ToLower(event.ContractAddress),
 		AmountShares:    transferData.Amount,
 		BlockNumber:     uint64(event.BlockNumber),
 	})

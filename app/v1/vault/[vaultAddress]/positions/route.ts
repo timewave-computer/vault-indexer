@@ -59,7 +59,7 @@ export const { GET } = defineRoute({
       .limit(Number(limit))
 
     if (owner_address) {
-      query.eq('owner_address', owner_address)
+      query.eq('owner_address', getCaseInsensitiveQuery(owner_address))
     }
 
     if (blockNumberFilter) {
