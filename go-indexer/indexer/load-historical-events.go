@@ -24,6 +24,7 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 
 		for _, eventName := range contractConfig.Events {
 			wg.Add(1)
+			// TODO: this is inefficient, consider loading outside of the loop
 			parsedABI, err := i.loadAbi(contractConfig)
 			if err != nil {
 				return fmt.Errorf("failed to load ABI for contract %s: %w", contractConfig.Address, err)

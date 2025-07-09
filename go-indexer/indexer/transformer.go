@@ -97,16 +97,13 @@ func (t *Transformer) Start() error {
 	t.wg.Add(1)
 	go func() {
 		defer t.wg.Done()
+		defer close(t.haltCh) // Signal that we've exited
 		for {
-			// Pause logic
-			t.haltMu.Lock()
-			isHalted := t.isHalted
-			t.haltMu.Unlock()
-			if isHalted {
+
+			select {
+			case <-t.haltCh:
 				t.logger.Info("Transformer is halted")
 				return
-			}
-			select {
 			case <-t.ctx.Done():
 				return
 			default:
@@ -296,65 +293,13 @@ func (t *Transformer) handleError(err error) {
 	}
 }
 
-// Stop gracefully stops the transformer
-func (t *Transformer) Stop() {
-	t.once.Do(func() {
-		t.logger.Info("Stopping transformer...")
-
-		if t.pgdb != nil {
-			t.pgdb.Close()
-		}
-		t.cancel()
-		t.wg.Wait()
-	})
-}
-
-func (t *Transformer) insertToTable(tx *sql.Tx, table string, data any) error {
-	t.logger.Debug("Building insert for table: %v, data: %v", table, data)
-	query, args, err := dbutil.BuildInsert(table, data)
-	if err != nil {
-		return err
-	}
-	t.logger.Debug("Executing insert: %v, args: %v", query, args)
-	_, err = tx.Exec(query, args...)
-	if err != nil {
-		t.logger.Error("DB insert error: %v", err)
-		return err
-	}
-	return nil
-}
-
-func (t *Transformer) updateInTable(tx *sql.Tx, table string, data any) error {
-	t.logger.Debug("Building update for table: %v, data: %v", table, data)
-	query, args, err := dbutil.BuildUpdate(table, data, []string{"id"})
-	if err != nil {
-		return err
-	}
-	t.logger.Debug("Executing update: %v, args: %v", query, args)
-	_, err = tx.Exec(query, args...)
-	if err != nil {
-		t.logger.Error("DB update error: %v", err)
-		return err
-	}
-	return nil
-}
-
-type DBOperation struct {
-	table string
-	data  any
-}
-
-type DatabaseOperations struct {
-	inserts []DBOperation
-	updates []DBOperation
-}
-
-func ptr[T any](v T) *T {
-	return &v
-}
-
 // handleCleanupFromBlock handles the cleanup of the database from a given block number
 func (t *Transformer) handleCleanupFromBlock(blockNumber int64, pgdb *sql.DB) error {
+
+	if !t.isHalted {
+		return fmt.Errorf("transformer is not halted, cannot safely do reorg cleanup")
+	}
+
 	t.logger.Info("Cleaning up from block: %v", blockNumber)
 
 	transformersArr := []interface {
@@ -403,6 +348,7 @@ func (t *Transformer) handleCleanupFromBlock(blockNumber int64, pgdb *sql.DB) er
 }
 
 // Halt halts the transformer processing
+// specifically for stopping processing to do reorg cleanup
 func (t *Transformer) Halt() {
 	t.haltMu.Lock()
 	defer t.haltMu.Unlock()
@@ -423,4 +369,61 @@ func (t *Transformer) WaitHalted(timeout time.Duration) bool {
 	case <-time.After(timeout):
 		return false
 	}
+}
+
+// Stop gracefully stops the transformer
+func (t *Transformer) Stop() {
+	t.once.Do(func() {
+		t.logger.Info("Stopping transformer...")
+		t.cancel()
+		t.wg.Wait()
+
+		if t.pgdb != nil {
+			t.pgdb.Close()
+		}
+	})
+}
+
+func (t *Transformer) insertToTable(tx *sql.Tx, table string, data any) error {
+	t.logger.Debug("Building insert for table: %v, data: %v", table, data)
+	query, args, err := dbutil.BuildInsert(table, data)
+	if err != nil {
+		return err
+	}
+	t.logger.Debug("Executing insert: %v, args: %v", query, args)
+	_, err = tx.Exec(query, args...)
+	if err != nil {
+		t.logger.Error("DB insert error: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (t *Transformer) updateInTable(tx *sql.Tx, table string, data any) error {
+	t.logger.Debug("Building update for table: %v, data: %v", table, data)
+	query, args, err := dbutil.BuildUpdate(table, data, []string{"id"})
+	if err != nil {
+		return err
+	}
+	t.logger.Debug("Executing update: %v, args: %v", query, args)
+	_, err = tx.Exec(query, args...)
+	if err != nil {
+		t.logger.Error("DB update error: %v", err)
+		return err
+	}
+	return nil
+}
+
+type DBOperation struct {
+	table string
+	data  any
+}
+
+type DatabaseOperations struct {
+	inserts []DBOperation
+	updates []DBOperation
+}
+
+func ptr[T any](v T) *T {
+	return &v
 }
