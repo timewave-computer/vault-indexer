@@ -300,7 +300,7 @@ func (t *Transformer) handleCleanupFromBlock(blockNumber int64, pgdb *sql.DB) er
 		return fmt.Errorf("transformer is not halted, cannot safely do reorg cleanup")
 	}
 
-	t.logger.Info("Cleaning up from block: %v", blockNumber)
+	t.logger.Info("Cleaning up events ingested after block: %v", blockNumber)
 
 	transformersArr := []interface {
 		CleanupFromBlock() []string
