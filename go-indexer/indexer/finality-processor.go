@@ -102,7 +102,7 @@ func (f *FinalityProcessor) Start() error {
 
 					currentBlockNumber := currentBlock.Number.Int64()
 
-					f.logger.Info("Current %s block: %d", blockTag, currentBlockNumber)
+					f.logger.Info("Last onchain %s block: %d", blockTag, currentBlockNumber)
 
 					lastValidatedBlockNumber, err := f.getLastValidatedBlockNumber(blockTag)
 					if err != nil {
@@ -119,7 +119,7 @@ func (f *FinalityProcessor) Start() error {
 					}
 					if event == nil {
 						// no next event to validate, wait for next iteration
-						f.logger.Info("No next event to validate, waiting 15 seconds for next iteration")
+						f.logger.Info("No next event to validate as %s greater than %v, waiting 15 seconds for next iteration", blockTag, lastValidatedBlockNumber)
 						time.Sleep(15 * time.Second)
 						continue
 					}
@@ -198,7 +198,7 @@ func (f *FinalityProcessor) getLastValidatedBlockNumber(blockTag string) (int64,
 
 func (f *FinalityProcessor) getNextEventToValidate(blockNumber int64) (*database.PublicEventsSelect, error) {
 
-	f.logger.Info("Getting next event to validate greater than block number: %v", blockNumber)
+	f.logger.Debug("Getting next event to validate greater than block number: %v", blockNumber)
 	var nextEvents []database.PublicEventsSelect
 	_, err := f.db.From("events").Select("id,block_number, block_hash", "", false).Gt("block_number", strconv.FormatInt(blockNumber, 10)).Limit(1, "").
 		Order("block_number", &postgrest.OrderOpts{Ascending: true}).
