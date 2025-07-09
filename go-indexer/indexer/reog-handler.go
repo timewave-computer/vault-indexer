@@ -20,7 +20,7 @@ func (i *Indexer) handleReorg(reorgEvent ReorgEvent) {
 		return
 	}
 
-	i.logger.Info("Transformer halted", isHalted)
+	i.logger.Info("Transformer halted")
 	i.finalityProcessor.Stop()
 
 	// 2. Clear the event queue
