@@ -56,10 +56,10 @@ func (w *RateUpdateTransformer) Transform(args ProcessRateUpdate) (database.Publ
 	return rateUpdate, nil
 }
 
-func (p *RateUpdateTransformer) CleanupFromBlock(blockNumber int64) []string {
+func (p *RateUpdateTransformer) CleanupFromBlock() []string {
 
 	return []string{
-		"DELETE FROM rate_updates WHERE block_number >= $1;",
+		"DELETE FROM rate_updates WHERE block_number > $1;",
 	}
 
 }

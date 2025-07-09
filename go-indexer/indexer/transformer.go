@@ -37,6 +37,11 @@ type Transformer struct {
 	lastError     error
 	lastErrorTime *time.Time
 	once          sync.Once
+
+	// Pause/resume support
+	haltCh   chan struct{}
+	isHalted bool
+	haltMu   sync.Mutex
 }
 
 // NewTransformer creates a new transformer instance
@@ -80,6 +85,8 @@ func NewTransformer(supa *supa.Client, pgdb *sql.DB, ethClient *ethclient.Client
 		positionTransformer:        positionTransformer,
 		withdrawRequestTransformer: withdrawRequestTransformer,
 		rateUpdateTransformer:      rateUpdateTransformer,
+		haltCh:                     make(chan struct{}, 1),
+		isHalted:                   false,
 	}, nil
 }
 
@@ -91,6 +98,14 @@ func (t *Transformer) Start() error {
 	go func() {
 		defer t.wg.Done()
 		for {
+			// Pause logic
+			t.haltMu.Lock()
+			isHalted := t.isHalted
+			t.haltMu.Unlock()
+			if isHalted {
+				t.logger.Info("Transformer is halted")
+				return
+			}
 			select {
 			case <-t.ctx.Done():
 				return
@@ -285,12 +300,12 @@ func (t *Transformer) handleError(err error) {
 func (t *Transformer) Stop() {
 	t.once.Do(func() {
 		t.logger.Info("Stopping transformer...")
-		t.cancel()
-		t.wg.Wait()
 
 		if t.pgdb != nil {
 			t.pgdb.Close()
 		}
+		t.cancel()
+		t.wg.Wait()
 	})
 }
 
@@ -340,9 +355,10 @@ func ptr[T any](v T) *T {
 
 // handleCleanupFromBlock handles the cleanup of the database from a given block number
 func (t *Transformer) handleCleanupFromBlock(blockNumber int64, pgdb *sql.DB) error {
+	t.logger.Info("Cleaning up from block: %v", blockNumber)
 
 	transformersArr := []interface {
-		CleanupFromBlock(blockNumber int64) []string
+		CleanupFromBlock() []string
 	}{
 		t.withdrawRequestTransformer,
 		t.rateUpdateTransformer,
@@ -351,18 +367,21 @@ func (t *Transformer) handleCleanupFromBlock(blockNumber int64, pgdb *sql.DB) er
 	tx, err := pgdb.BeginTx(t.ctx, &sql.TxOptions{
 		Isolation: sql.LevelReadCommitted,
 	})
+	t.logger.Info("Begin reorg cleanup transaction")
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %v", err)
 	}
 
 	for _, transformer := range transformersArr {
-		sqls := transformer.CleanupFromBlock(blockNumber)
+		sqls := transformer.CleanupFromBlock()
 		for _, sql := range sqls {
-			_, err := pgdb.Exec(sql)
+			_, err := tx.Exec(sql, blockNumber)
 			if err != nil {
 				tx.Rollback()
+				t.logger.Error("failed to handle cleanup for %v: %v", transformer, err)
 				return fmt.Errorf("failed to handle cleanup for %v: %v", transformer, err)
 			}
+			t.logger.Info("Successfully executed cleanup sql: %v", sql)
 		}
 	}
 
@@ -372,6 +391,7 @@ func (t *Transformer) handleCleanupFromBlock(blockNumber int64, pgdb *sql.DB) er
 		return fmt.Errorf("failed to delete events: %v", err)
 	}
 
+	t.logger.Info("Committing reorg cleanup transaction")
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %v", err)
 	}
@@ -380,4 +400,27 @@ func (t *Transformer) handleCleanupFromBlock(blockNumber int64, pgdb *sql.DB) er
 
 	return nil
 
+}
+
+// Halt halts the transformer processing
+func (t *Transformer) Halt() {
+	t.haltMu.Lock()
+	defer t.haltMu.Unlock()
+	if !t.isHalted {
+		t.isHalted = true
+		// non-blocking send in case multiple Pause() calls
+		select {
+		case t.haltCh <- struct{}{}:
+		default:
+		}
+		t.logger.Info("Transformer halt requested")
+	}
+}
+func (t *Transformer) WaitHalted(timeout time.Duration) bool {
+	select {
+	case <-t.haltCh:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }

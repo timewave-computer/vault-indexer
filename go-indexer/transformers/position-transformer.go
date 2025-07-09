@@ -427,10 +427,10 @@ func (p *PositionTransformer) getMaxPositionIndexId(contractAddress string) (int
 	return maxPositionIndexId, nil
 }
 
-func (p *PositionTransformer) CleanupFromBlock(blockNumber int64) []string {
+func (p *PositionTransformer) CleanupFromBlock() []string {
 
 	return []string{
-		"UPDATE positions SET is_terminated = null, position_end_height = null, withdraw_receiver_address = null where position_end_height >= $1;",
-		"DELETE FROM positions WHERE position_start_height >= $1;",
+		"DELETE FROM positions WHERE position_start_height > $1;",
+		"UPDATE positions SET is_terminated = false, position_end_height = null, withdraw_receiver_address = null where position_end_height > $1;",
 	}
 }

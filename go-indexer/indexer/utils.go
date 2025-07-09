@@ -63,7 +63,7 @@ func CheckCanonicalBlock(ethClient *ethclient.Client, logger *logger.Logger, blo
 
 	if err != nil {
 		if errors.Is(err, ethereum.NotFound) {
-			logger.Error("Header not found for block %v with hash %v", blockNumber, blockHash)
+			logger.Debug("Header not found for block %v with hash %v", blockNumber, blockHash)
 			return false, nil
 		}
 		logger.Error("Error getting canonical block for %v: %v", blockNumber, err)

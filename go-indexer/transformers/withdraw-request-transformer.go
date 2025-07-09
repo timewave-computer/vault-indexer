@@ -45,10 +45,10 @@ func (w *WithdrawRequestTransformer) Transform(args ProcessWithdrawRequest) (dat
 	return withdrawRequest, nil
 }
 
-func (p *WithdrawRequestTransformer) CleanupFromBlock(blockNumber int64) []string {
+func (p *WithdrawRequestTransformer) CleanupFromBlock() []string {
 
 	return []string{
-		"DELETE FROM withdraw_requests WHERE block_number >= $1;",
+		"DELETE FROM withdraw_requests WHERE block_number > $1;",
 	}
 
 }
