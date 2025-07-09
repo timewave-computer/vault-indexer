@@ -68,7 +68,10 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 
 	eventProcessor := NewEventProcessor(eventQueue, extractor, ethClient, 4, ctx, haltManager)
 
-	finalityProcessor := NewFinalityProcessor(ethClient, supabaseClient, ctx, haltManager)
+	// Create reorg channel first
+	reorgChan := make(chan ReorgEvent)
+
+	finalityProcessor := NewFinalityProcessor(ethClient, supabaseClient, ctx, haltManager, reorgChan)
 
 	postgresClient, err := sql.Open("postgres", cfg.Database.PostgresConnectionString)
 	if err != nil {
@@ -101,7 +104,7 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 		eventQueue:              eventQueue,
 		requiredConfirmations:   4,
 		eventIngestionErrorChan: errorChan,
-		reorgChan:               make(chan ReorgEvent),
+		reorgChan:               reorgChan,
 		processWg:               sync.WaitGroup{},
 		eventProcessor:          eventProcessor,
 		haltManager:             haltManager,

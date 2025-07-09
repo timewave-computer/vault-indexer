@@ -33,7 +33,7 @@ type ReorgEvent struct {
 	BlockTag    string
 }
 
-func NewFinalityProcessor(ethClient *ethclient.Client, db *supa.Client, ctx context.Context, haltManager *HaltManager) *FinalityProcessor {
+func NewFinalityProcessor(ethClient *ethclient.Client, db *supa.Client, ctx context.Context, haltManager *HaltManager, reorgChan chan ReorgEvent) *FinalityProcessor {
 	logger := logger.NewLogger("FinalityProcessor")
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -44,7 +44,7 @@ func NewFinalityProcessor(ethClient *ethclient.Client, db *supa.Client, ctx cont
 		ctx:          ctx,
 		cancel:       cancel,
 		wg:           sync.WaitGroup{},
-		reorgChannel: make(chan ReorgEvent, 10),
+		reorgChannel: reorgChan,
 		haltManager:  haltManager,
 	}
 }
@@ -75,6 +75,10 @@ func (f *FinalityProcessor) Start() error {
 		for {
 			select {
 			case <-f.ctx.Done():
+				return
+			case <-f.reorgChannel:
+				// reorg detected, stop processing
+				f.logger.Info("Reorg detected, exiting cycle")
 				return
 			case <-f.haltManager.HaltChannel():
 				// halt requested, stop processing
