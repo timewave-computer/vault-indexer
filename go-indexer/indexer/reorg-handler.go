@@ -3,65 +3,68 @@ package indexer
 import (
 	"fmt"
 	"strconv"
+	"time"
 
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/supabase-community/postgrest-go"
-	"github.com/supabase-community/supabase-go"
 	"github.com/timewave/vault-indexer/go-indexer/database"
-	"github.com/timewave/vault-indexer/go-indexer/logger"
 )
 
-type ReorgHandler struct {
-	logger         *logger.Logger
-	ethClient      *ethclient.Client
-	supabaseClient *supabase.Client
-}
+func (i *Indexer) handleReorg(reorgEvent ReorgEvent) {
+	i.logger.Info("Handling reorg event: %+v", reorgEvent)
 
-func NewReorgHandler(ethClient *ethclient.Client, supabaseClient *supabase.Client) *ReorgHandler {
-	return &ReorgHandler{
-		logger:         logger.NewLogger("ReorgHandler"),
-		ethClient:      ethClient,
-		supabaseClient: supabaseClient,
+	// 1. Stop all child processes
+	i.logger.Info("Stopping all child processes due to reorg...")
+	i.extractor.Stop()
+	// must halt so it stops processing, but use the methods to update the database
+	i.transformer.Halt()
+	isHalted := i.transformer.WaitHalted(120 * time.Second)
+	if !isHalted {
+		i.logger.Error("Transformer did not pause in time")
+		i.Stop()
+		return
 	}
-}
 
-func (r *ReorgHandler) cleanupReorgData(reorgEvent ReorgEvent) error {
-	r.logger.Info("Cleaning up data for reorg detectedat block %d", reorgEvent.BlockNumber)
+	i.logger.Info("Transformer halted")
+	i.finalityProcessor.Stop()
 
-	fromBlock := reorgEvent.BlockNumber
+	// 2. Clear the event queue
+	i.logger.Info("Clearing event queue due to reorg...")
+	i.eventQueue.Clear()
 
-	// Step 1: Find the last valid block
-	lastConsistentBlock, err := r.findLastConsistentBlock(fromBlock)
+	// 3. Stop the event processor
+	i.logger.Info("Stopping event processor due to reorg...")
+	i.eventProcessor.Stop()
+
+	// 3. Execute cleanup logic
+	i.logger.Info("Finding last consistent block before block number: %d", reorgEvent.BlockNumber)
+	lastConsistentBlock, err := i.findLastConsistentBlock(reorgEvent.BlockNumber)
 	if err != nil {
-		return fmt.Errorf("failed to find last valid block: %w", err)
+		i.logger.Error("Failed to find last consistent block: %v", err)
+		i.Stop()
+		return
+	}
+	i.logger.Info("Executing cleanup logic after last consistent block number: %d", lastConsistentBlock)
+	err = i.transformer.handleCleanupFromBlock(lastConsistentBlock, i.postgresClient)
+	if err != nil {
+		i.logger.Error("Failed to cleanup reorg data: %v", err)
+		i.Stop()
+		return
 	}
 
-	r.logger.Info("Last consistent block: %d", lastConsistentBlock)
+	i.transformer.Stop()
 
-	// TODO: Implement specific cleanup logic based on your requirements
-	// This could include:
-	// - Removing events from database that are from the reorged blocks
-	// - Marking positions as invalid
-	// - Clearing cached data
-	// - Updating finality status
-
-	// Example cleanup operations:
-	// 1. Delete events from reorged blocks
-	// 2. Reset position tracking
-	// 3. Clear any cached state
-	r.logger.Info("Reorg cleanup completed successfully")
-
-	return nil
-
+	// 4. Power down the indexer
+	i.logger.Info("Powering down indexer after reorg handling...")
+	i.Stop()
 }
 
 // findLastConsistentBlock finds the last block that is still valid by checking the canonical chain
-func (r *ReorgHandler) findLastConsistentBlock(blockNumber int64) (int64, error) {
-	r.logger.Info("Searching for last valid block before %d", blockNumber)
+func (i *Indexer) findLastConsistentBlock(reorgDetectedBlock int64) (int64, error) {
+	i.logger.Debug("Searching for last valid block before %d", reorgDetectedBlock)
 
-	fromBlock := blockNumber
+	fromBlock := reorgDetectedBlock - 1
 	for {
-		nearestIngestedEvent, err := r.getNearestIngestedEvent(fromBlock)
+		nearestIngestedEvent, err := i.getNearestIngestedEvent(fromBlock)
 		if err != nil {
 			return 0, err
 		}
@@ -69,14 +72,14 @@ func (r *ReorgHandler) findLastConsistentBlock(blockNumber int64) (int64, error)
 			return 0, fmt.Errorf("no nearest ingested event found for block %d", fromBlock)
 		}
 
-		isCanonical, err := CheckCanonicalBlock(r.ethClient, r.logger, nearestIngestedEvent.BlockNumber, nearestIngestedEvent.BlockHash)
-		r.logger.Info("Is canonical: %v, block number: %v, hash: %v", isCanonical, nearestIngestedEvent.BlockNumber, nearestIngestedEvent.BlockHash)
+		isCanonical, err := CheckCanonicalBlock(i.ethClient, i.logger, nearestIngestedEvent.BlockNumber, nearestIngestedEvent.BlockHash)
+		i.logger.Debug("Is canonical: %v, block number: %v, hash: %v", isCanonical, nearestIngestedEvent.BlockNumber, nearestIngestedEvent.BlockHash)
 		if err != nil {
 			return 0, err
 		}
 
 		if isCanonical {
-			return fromBlock, nil
+			return nearestIngestedEvent.BlockNumber, nil
 		}
 
 		fromBlock = nearestIngestedEvent.BlockNumber - 1
@@ -85,40 +88,22 @@ func (r *ReorgHandler) findLastConsistentBlock(blockNumber int64) (int64, error)
 }
 
 // GetNearestIngestedEvent retrieves the nearest ingested event for a given block number
-func (r *ReorgHandler) getNearestIngestedEvent(blockNumber int64) (*database.PublicEventsSelect, error) {
-	if blockNumber == 0 {
-		var nearestEvents []database.PublicEventsSelect
+func (r *Indexer) getNearestIngestedEvent(blockNumber int64) (*database.PublicEventsSelect, error) {
+	var nearestEvents []database.PublicEventsSelect
 
-		_, err := r.supabaseClient.From("events").Select("block_number, block_hash", "", false).
-			Lte("block_number", strconv.FormatInt(blockNumber, 10)).
-			Limit(1, "").
-			Order("block_number", &postgrest.OrderOpts{Ascending: false}).
-			ExecuteTo(&nearestEvents)
+	_, err := r.supabaseClient.From("events").Select("block_number, block_hash", "", false).
+		Lte("block_number", strconv.FormatInt(blockNumber, 10)).
+		Limit(1, "").
+		Order("block_number", &postgrest.OrderOpts{Ascending: false}).
+		ExecuteTo(&nearestEvents)
 
-		if err != nil {
-			return nil, err
-		}
-		if len(nearestEvents) == 0 {
-			return nil, nil
-		}
-
-		return &nearestEvents[0], nil
-	} else {
-		var mostRecentEvents []database.PublicEventsSelect
-
-		_, err := r.supabaseClient.From("events").Select("block_number, block_hash", "", false).
-			Limit(1, "").
-			Lte("block_number", strconv.FormatInt(blockNumber, 10)).
-			Order("block_number", &postgrest.OrderOpts{Ascending: false}).
-			ExecuteTo(&mostRecentEvents)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(mostRecentEvents) == 0 {
-			return nil, nil
-		}
-
-		return &mostRecentEvents[0], nil
+	if err != nil {
+		return nil, err
 	}
+	if len(nearestEvents) == 0 {
+		return nil, nil
+	}
+
+	return &nearestEvents[0], nil
+
 }

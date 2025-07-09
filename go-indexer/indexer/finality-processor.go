@@ -113,9 +113,9 @@ func (f *FinalityProcessor) Start() error {
 						time.Sleep(15 * time.Second)
 						continue
 					}
-					f.logger.Info("Next event to validate: %v", event)
+					f.logger.Debug("Next event to validate: %v", event)
 					if event.BlockNumber < lastValidatedBlockNumber {
-						f.logger.Info("Next event to validate is less than last validated block number, waiting 15 seconds for next iteration")
+						f.logger.Info("Next event to validate is at block number %v, which is less than last validated block number %v, waiting 15 seconds for next iteration", event.BlockNumber, lastValidatedBlockNumber)
 						time.Sleep(15 * time.Second)
 						continue
 					}

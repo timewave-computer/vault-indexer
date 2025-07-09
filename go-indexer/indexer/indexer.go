@@ -35,7 +35,6 @@ type Indexer struct {
 	reorgChan             chan ReorgEvent
 	processWg             sync.WaitGroup
 	eventProcessor        *EventProcessor
-	reorgHandler          *ReorgHandler
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
@@ -64,8 +63,6 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 	eventProcessor := NewEventProcessor(eventQueue, extractor, ethClient, 4)
 
 	finalityProcessor := NewFinalityProcessor(ethClient, supabaseClient)
-
-	reorgHandler := NewReorgHandler(ethClient, supabaseClient)
 
 	postgresClient, err := sql.Open("postgres", cfg.Database.PostgresConnectionString)
 	if err != nil {
@@ -101,7 +98,6 @@ func New(ctx context.Context, cfg *config.Config) (*Indexer, error) {
 		reorgChan:             make(chan ReorgEvent),
 		processWg:             sync.WaitGroup{},
 		eventProcessor:        eventProcessor,
-		reorgHandler:          reorgHandler,
 	}, nil
 }
 
