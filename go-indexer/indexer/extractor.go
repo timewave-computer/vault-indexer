@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -67,7 +68,7 @@ func (e *Extractor) writeIdempotentEvent(vLog types.Log, event abi.Event) error 
 	// Insert into Supabase
 	data, _, err = e.db.From("events").
 		Insert(ToEventIngestionInsert(database.PublicEventsInsert{
-			ContractAddress: eventData.ContractAddress,
+			ContractAddress: strings.ToLower(eventData.ContractAddress),
 			EventName:       eventData.EventName,
 			BlockNumber:     eventData.BlockNumber,
 			TransactionHash: eventData.TransactionHash,

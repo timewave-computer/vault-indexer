@@ -2,6 +2,7 @@ package eventTransformHandler
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/timewave/vault-indexer/go-indexer/database"
 	transformers "github.com/timewave/vault-indexer/go-indexer/transformers"
@@ -46,7 +47,7 @@ func (h *RateUpdateHandler) Handle(event database.PublicEventsSelect, eventData 
 
 	// Process position transformation
 	inserts, err := h.rateUpdateTransformer.Transform(transformers.ProcessRateUpdate{
-		ContractAddress: event.ContractAddress,
+		ContractAddress: strings.ToLower(event.ContractAddress),
 		Rate:            rateUpdateData.Rate,
 		BlockNumber:     event.BlockNumber,
 	})

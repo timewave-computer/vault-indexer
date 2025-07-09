@@ -1,7 +1,7 @@
 import { isAddress } from 'ethers'
 import defineRoute from "@omer-x/next-openapi-route-handler";
 import { z } from "zod";
-import { getMostRecentBlockNumber, supabase, paginationSchema } from "@/app/lib";
+import {  supabase, paginationSchema, getCaseInsensitiveQuery, getBlockNumberFilterForTag } from "@/app/lib";
 
 const getWithdrawRequestsByAddressResponseSchema = z.object({
   data: z.array(z.object({
@@ -37,7 +37,7 @@ export const { GET } = defineRoute({
 
       const { from, limit, order, blockTag } = queryParams
 
-      const blockNumber = blockTag ? (await getMostRecentBlockNumber(blockTag)) : 0
+      const blockNumberFilter = blockTag ? (await getBlockNumberFilterForTag(blockTag, supabase)) : undefined
 
 
       const query = supabase.from('withdraw_requests').select(`
@@ -46,12 +46,12 @@ export const { GET } = defineRoute({
         block_number,
         owner_address,
         receiver_address
-      `).eq('contract_address', vaultAddress)
-        .eq('owner_address', ownerAddress)
+      `).eq('contract_address', getCaseInsensitiveQuery(vaultAddress))
+        .eq('owner_address', getCaseInsensitiveQuery(ownerAddress))
         .limit(Number(limit))
 
-      if (queryParams.blockTag) {
-        query.lte('block_number', blockNumber)
+      if (blockNumberFilter) {
+        query.lte('block_number', blockNumberFilter)
       }
 
       if (order === 'desc') {
