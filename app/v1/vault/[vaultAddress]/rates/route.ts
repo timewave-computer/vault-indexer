@@ -13,7 +13,7 @@ import { getCaseInsensitiveQuery, supabase , timeRangeSchema, getBlockNumberFilt
   })),
 })
 
-export const MAX_TIME_RANGE_RESULTS = 5000
+const MAX_TIME_RANGE_RESULTS = 5000
 export const { GET } = defineRoute({
   method: "GET",
   operationId: "getRates",
