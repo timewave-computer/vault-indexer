@@ -140,3 +140,19 @@ Visit the api at `localhost:3000/v1`
 
 ## API docs and schema
 Docs served at `/docs`. Generated automatically
+
+
+# Testing
+## Check that remote database matches expected result
+1. Start with fresh local DB
+`npx supabase db reset`
+
+2. Load in historical set of data 
+`./start-indexer.go`
+
+3. Define connection params for test
+- populate `go-indexer/scripts/.env.scripts` with local and remote DB urls, and eth websocket RPC url
+
+4. Run comparison script
+- `cd go-indexer/scripts` *MUST* do this
+- run comparison script `go run data-check.go`
