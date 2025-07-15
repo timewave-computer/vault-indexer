@@ -17,7 +17,7 @@ import (
 * Purpose: ingest historical data from scratch, and compare with remote records
 * 1. load env vars from .env.scripts
 * 2. fetch unique contract addresses from remote DB
-* 2. for each contract + table, load all records (in batches of 1000) and exec comparison function for table
+* 2. for each contract + table, load all records and exec comparison function for table
  */
 
 // Define a set of comparators
@@ -153,18 +153,18 @@ func getUniqueContractAddresses(db *sql.DB, currentBlock uint64) ([]string, erro
 }
 
 func compareEvents(localRows, remoteRows any) error {
-	lEvents, ok1 := localRows.([]database.PublicEventsSelect)
-	rEvents, ok2 := remoteRows.([]database.PublicEventsSelect)
+	l, ok1 := localRows.([]database.PublicEventsSelect)
+	r, ok2 := remoteRows.([]database.PublicEventsSelect)
 
 	if !ok1 || !ok2 {
 		return fmt.Errorf("compareEvents: input types must be []database.PublicEventsSelect")
 	}
-	if len(lEvents) != len(rEvents) {
-		return fmt.Errorf("row count mismatch: local=%d remote=%d", len(lEvents), len(rEvents))
+	if len(l) != len(r) {
+		return fmt.Errorf("row count mismatch: local=%d remote=%d", len(l), len(r))
 	}
-	for i := range lEvents {
-		l := lEvents[i]
-		r := rEvents[i]
+	for i := range l {
+		l := l[i]
+		r := r[i]
 		if l.BlockNumber != r.BlockNumber || l.EventName != r.EventName || l.LogIndex != r.LogIndex || l.TransactionHash != r.TransactionHash {
 			return fmt.Errorf("mismatch at index %d: LOCAL={block_number:%d event_name:%s log_index:%d transaction_hash:%s} REMOTE={block_number:%d event_name:%s log_index:%d transaction_hash:%s}",
 				i, l.BlockNumber, l.EventName, l.LogIndex, l.TransactionHash, r.BlockNumber, r.EventName, r.LogIndex, r.TransactionHash)
@@ -174,18 +174,18 @@ func compareEvents(localRows, remoteRows any) error {
 }
 
 func compareRateUpdates(localRows, remoteRows any) error {
-	lEvents, ok1 := localRows.([]database.PublicRateUpdatesSelect)
-	rEvents, ok2 := remoteRows.([]database.PublicRateUpdatesSelect)
+	l, ok1 := localRows.([]database.PublicRateUpdatesSelect)
+	r, ok2 := remoteRows.([]database.PublicRateUpdatesSelect)
 
 	if !ok1 || !ok2 {
 		return fmt.Errorf("compareRateUpdates: input types must be []database.PublicRateUpdatesSelect")
 	}
-	if len(lEvents) != len(rEvents) {
-		return fmt.Errorf("row count mismatch: local=%d remote=%d", len(lEvents), len(rEvents))
+	if len(l) != len(r) {
+		return fmt.Errorf("row count mismatch: local=%d remote=%d", len(l), len(r))
 	}
-	for i := range lEvents {
-		l := lEvents[i]
-		r := rEvents[i]
+	for i := range l {
+		l := l[i]
+		r := r[i]
 		if l.Rate != r.Rate || l.BlockNumber != r.BlockNumber {
 			return fmt.Errorf("mismatch at index %d: LOCAL={rate:%s block_number:%d} REMOTE={rate:%s block_number:%d}",
 				i, l.Rate, l.BlockNumber, r.Rate, r.BlockNumber)
@@ -195,18 +195,18 @@ func compareRateUpdates(localRows, remoteRows any) error {
 }
 
 func compareWithdrawRequests(localRows, remoteRows any) error {
-	lEvents, ok1 := localRows.([]database.PublicWithdrawRequestsSelect)
-	rEvents, ok2 := remoteRows.([]database.PublicWithdrawRequestsSelect)
+	l, ok1 := localRows.([]database.PublicWithdrawRequestsSelect)
+	r, ok2 := remoteRows.([]database.PublicWithdrawRequestsSelect)
 
 	if !ok1 || !ok2 {
 		return fmt.Errorf("compareWithdrawRequests: input types must be []database.PublicWithdrawRequestsSelect")
 	}
-	if len(lEvents) != len(rEvents) {
-		return fmt.Errorf("row count mismatch: local=%d remote=%d", len(lEvents), len(rEvents))
+	if len(l) != len(r) {
+		return fmt.Errorf("row count mismatch: local=%d remote=%d", len(l), len(r))
 	}
-	for i := range lEvents {
-		l := lEvents[i]
-		r := rEvents[i]
+	for i := range l {
+		l := l[i]
+		r := r[i]
 		if l.Amount != r.Amount || l.BlockNumber != r.BlockNumber || l.ContractAddress != r.ContractAddress || l.Id != r.Id || l.ReceiverAddress != r.ReceiverAddress || l.WithdrawId != r.WithdrawId {
 			return fmt.Errorf("mismatch at index %d: LOCAL={amount:%s block_number:%d contract_address:%s id:%s receiver_address:%s withdraw_id:%d} REMOTE={amount:%s block_number:%d contract_address:%s id:%s receiver_address:%s withdraw_id:%d}",
 				i, l.Amount, l.BlockNumber, l.ContractAddress, l.Id, l.ReceiverAddress, l.WithdrawId, r.Amount, r.BlockNumber, r.ContractAddress, r.Id, r.ReceiverAddress, r.WithdrawId)
@@ -216,18 +216,18 @@ func compareWithdrawRequests(localRows, remoteRows any) error {
 }
 
 func comparePositions(localRows, remoteRows any) error {
-	lEvents, ok1 := localRows.([]database.PublicPositionsSelect)
-	rEvents, ok2 := remoteRows.([]database.PublicPositionsSelect)
+	l, ok1 := localRows.([]database.PublicPositionsSelect)
+	r, ok2 := remoteRows.([]database.PublicPositionsSelect)
 
 	if !ok1 || !ok2 {
 		return fmt.Errorf("comparePositions: input types must be []database.PublicPositionsSelect")
 	}
-	if len(lEvents) != len(rEvents) {
-		return fmt.Errorf("row count mismatch: local=%d remote=%d", len(lEvents), len(rEvents))
+	if len(l) != len(r) {
+		return fmt.Errorf("row count mismatch: local=%d remote=%d", len(l), len(r))
 	}
-	for i := range lEvents {
-		l := lEvents[i]
-		r := rEvents[i]
+	for i := range l {
+		l := l[i]
+		r := r[i]
 
 		// Helper function to safely compare pointer values
 		compareInt64Ptr := func(a, b *int64) bool {

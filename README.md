@@ -148,7 +148,7 @@ Docs served at `/docs`. Generated automatically
 `npx supabase db reset`
 
 2. Load in historical set of data 
-`./start-server.go`
+`./start-indexer.go`
 
 3. Define connection params for test
 - populate `go-indexer/scripts/.env.scripts` with local and remote DB urls, and eth websocket RPC url
