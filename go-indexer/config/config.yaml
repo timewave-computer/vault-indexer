@@ -56,3 +56,12 @@ contracts:
         - "Transfer"
         - "WithdrawRequested"
         - "RateUpdated"
+    - name: "USDC Test2"
+      address: "0x94c893c7ffe53a176f42d24d2e9e0b67bc7d4360"
+      start_block: 22945822
+      abi_path: "vault.abi.json"
+      events:
+        - "Deposit"
+        - "Transfer"
+        - "WithdrawRequested"
+        - "RateUpdated"
