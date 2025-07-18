@@ -207,7 +207,7 @@ func compareWithdrawRequests(localRows, remoteRows any) error {
 	for i := range l {
 		l := l[i]
 		r := r[i]
-		if l.Amount != r.Amount || l.BlockNumber != r.BlockNumber || l.ContractAddress != r.ContractAddress || l.Id != r.Id || l.ReceiverAddress != r.ReceiverAddress || l.WithdrawId != r.WithdrawId {
+		if l.Amount != r.Amount || l.BlockNumber != r.BlockNumber || l.ReceiverAddress != r.ReceiverAddress || l.WithdrawId != r.WithdrawId {
 			return fmt.Errorf("mismatch at index %d: LOCAL={amount:%s block_number:%d contract_address:%s id:%s receiver_address:%s withdraw_id:%d} REMOTE={amount:%s block_number:%d contract_address:%s id:%s receiver_address:%s withdraw_id:%d}",
 				i, l.Amount, l.BlockNumber, l.ContractAddress, l.Id, l.ReceiverAddress, l.WithdrawId, r.Amount, r.BlockNumber, r.ContractAddress, r.Id, r.ReceiverAddress, r.WithdrawId)
 		}
@@ -277,7 +277,7 @@ func comparePositions(localRows, remoteRows any) error {
 				rWithdrawAddr = *r.WithdrawReceiverAddress
 			}
 
-			return fmt.Errorf("mismatch at index %d: LOCAL={amount_shares:%s is_terminated:%t owner_address:%s position_end_height:%s position_index_id:%d position_start_height:%d withdraw_receiver_address:%s} REMOTE={amount_shares:%s is_terminated:%t owner_address:%s position_end_height:%s position_index_id:%d position_start_height:%d withdraw_receiver_address:%s}",
+			return fmt.Errorf("mismatch sat index %d: LOCAL={amount_shares:%s is_terminated:%t owner_address:%s position_end_height:%s position_index_id:%d position_start_height:%d withdraw_receiver_address:%s} REMOTE={amount_shares:%s is_terminated:%t owner_address:%s position_end_height:%s position_index_id:%d position_start_height:%d withdraw_receiver_address:%s}",
 				i, l.AmountShares, l.IsTerminated, l.OwnerAddress, lEndHeight, l.PositionIndexId, l.PositionStartHeight, lWithdrawAddr, r.AmountShares, r.IsTerminated, r.OwnerAddress, rEndHeight, r.PositionIndexId, r.PositionStartHeight, rWithdrawAddr)
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
@@ -86,6 +87,11 @@ func Load(c *Config) (*Config, error) {
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	// Convert contract addresses to lowercase
+	for i := range config.Contracts {
+		config.Contracts[i].Address = strings.ToLower(config.Contracts[i].Address)
 	}
 
 	// Set credentials from environment variables

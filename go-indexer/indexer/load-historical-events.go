@@ -33,7 +33,6 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 
 			go func(contractConfig config.ContractConfig, event abi.Event) {
 				defer wg.Done()
-				contractAddress := common.HexToAddress(contractConfig.Address)
 
 				select {
 				case <-i.ctx.Done():
@@ -42,7 +41,14 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 					// continue
 				}
 
-				lastIndexedBlock, err := i.getLastIndexedBlock(contractAddress, event)
+				lastIndexedBlock, err := i.getLastIndexedBlock(contractConfig.Address, event)
+				if lastIndexedBlock == nil {
+					i.logger.Warn("No last indexed block found, using start block: %d", contractConfig.StartBlock)
+					v := int64(contractConfig.StartBlock)
+					lastIndexedBlock = &v
+				} else {
+					i.logger.Info("Last indexed block: %d", *lastIndexedBlock)
+				}
 				if err != nil {
 					// Use centralized error channel
 					select {
@@ -62,8 +68,9 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 
 				i.logger.Info("Fetching historical events for %s on contract %s, from block %d to block %d", event.Name, contractConfig.Address, *lastIndexedBlock, _currentBlock)
 
+				contractAddressFormatted := common.HexToAddress(contractConfig.Address)
 				query := ethereum.FilterQuery{
-					Addresses: []common.Address{contractAddress},
+					Addresses: []common.Address{contractAddressFormatted},
 					Topics:    [][]common.Hash{{event.ID}},
 					FromBlock: fromBlock,
 					ToBlock:   toBlock,
@@ -87,7 +94,7 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 						LogIndex:        vLog.Index,
 						Event:           event,
 						Data:            vLog,
-						ContractAddress: contractAddress,
+						ContractAddress: contractAddressFormatted,
 						BlockHash:       vLog.BlockHash,
 					}
 					i.eventQueue.Insert(eventLog)
@@ -97,10 +104,10 @@ func (i *Indexer) loadHistoricalEvents(_currentBlock uint64, wg *sync.WaitGroup)
 	}
 	return nil
 }
-func (i *Indexer) getLastIndexedBlock(contractAddress common.Address, event abi.Event) (*int64, error) {
+func (i *Indexer) getLastIndexedBlock(contractAddress string, event abi.Event) (*int64, error) {
 	data, _, err := i.supabaseClient.From("events").
 		Select("block_number", "", false).
-		Eq("contract_address", contractAddress.String()).
+		Eq("contract_address", contractAddress).
 		Eq("event_name", event.Name).
 		Order("block_number", &postgrest.OrderOpts{Ascending: false}).
 		Limit(1, "").
@@ -111,6 +118,7 @@ func (i *Indexer) getLastIndexedBlock(contractAddress common.Address, event abi.
 	}
 
 	var indexedEvents []database.PublicEventsSelect
+	i.logger.Debug("Getting last indexed block for contract %s, event %s, found: %s", contractAddress, event.Name, string(data))
 
 	if err := json.Unmarshal(data, &indexedEvents); err != nil {
 		return nil, err
