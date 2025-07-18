@@ -3,7 +3,7 @@ ethereum:
 
 contracts:
     - name: "Mock WBTC Test Vault"
-      address: "0xf2B85C389A771035a9Bd147D4BF87987A7F9cf98"
+      address: "0xf2b85c389a771035a9bd147d4bf87987a7f9cf98"
       start_block: 22577826
       abi_path: "vault.abi.json"
       events:
@@ -12,7 +12,7 @@ contracts:
         - "WithdrawRequested"
         - "RateUpdated"
     - name: "Mock WBTC Test Vault2"
-      address: "0x0B3B3a2C11D6676816fe214B7F23446D12D762FF"
+      address: "0x0b3b3a2c11d6676816fe214b7f23446d12d762ff"
       start_block: 22634425
       abi_path: "vault.abi.json"
       events:
@@ -21,7 +21,7 @@ contracts:
         - "WithdrawRequested"
         - "RateUpdated"
     - name: "WBTC Test1"
-      address: "0x3EA82BDA12e3cba18E4A9fD0cf7DE2fB78cA4d32"
+      address: "0x3ea82bda12e3cba18e4a9fd0cf7de2fb78ca4d32"
       start_block: 22694852
       abi_path: "vault.abi.json"
       events:
