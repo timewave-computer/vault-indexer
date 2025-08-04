@@ -7,7 +7,7 @@ import {  supabase, paginationSchema, getBlockNumberFilterForTag, getCaseInsensi
 
 const getWithdrawRequestsQuerySchema = paginationSchema.extend({
   owner_address: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional().describe('Filter by request owner. Ethereum address'),
-  receiver_address: z.string().regex(/^neutron1[0-9a-z]{38,59}$/).optional().describe('Filter by receiver receiver. Neutron address'),
+  receiver_address: z.string().regex(/^neutron1[0-9a-z]{38,59}$/).optional().describe('Filter by receiver address. Neutron address'),
 })
 
 const getWithdrawRequestsResponseSchema = z.object({
