@@ -143,7 +143,8 @@ Docs served at `/docs`. Generated automatically
 
 
 # Data Testing
-## Check that remote database matches expected result
+Manaul check which can be run to load all historical data locally, and compare that production matches the historical load.
+
 1. Start with fresh local DB
 `npx supabase db reset`
 
