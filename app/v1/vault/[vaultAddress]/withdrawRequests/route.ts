@@ -5,8 +5,10 @@ import defineRoute from "@omer-x/next-openapi-route-handler";
 import { z } from "zod";
 import {  supabase, paginationSchema, getBlockNumberFilterForTag, getCaseInsensitiveQuery } from "@/app/lib";
 
-
-
+const getWithdrawRequestsQuerySchema = paginationSchema.extend({
+  owner_address: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional().describe('Filter by request owner. Ethereum address'),
+  receiver_address: z.string().regex(/^neutron1[0-9a-z]{38,59}$/).optional().describe('Filter by receiver address. Neutron address'),
+})
 
 const getWithdrawRequestsResponseSchema = z.object({
   data: z.array(z.object({
@@ -18,17 +20,16 @@ const getWithdrawRequestsResponseSchema = z.object({
   })),
 })
 
-
 export const { GET } = defineRoute({
   method: "GET",
   operationId: "getWithdrawRequests",
   tags: ["/v1/vault"],
-  summary: "All withdraw requests",
+  summary: "Withdraw requests",
   description: "Fetches all withdraw requests for a vault. Withdraw requests are created when a user requests to withdraw their shares from the vault.",
   pathParams: z.object({
     vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('Ethereum address'),
   }),
-  queryParams: paginationSchema,
+  queryParams: getWithdrawRequestsQuerySchema,
   action: async({pathParams, queryParams}) => {
     try {
       const { vaultAddress } = pathParams
@@ -37,7 +38,7 @@ export const { GET } = defineRoute({
         throw new Error('Vault address is invalid ethereum address')
       }
    
-      const {from, limit, order ,blockTag } = queryParams
+      const {from, limit, order ,blockTag, owner_address, receiver_address } = queryParams
 
       const blockNumberFilter = blockTag ? (await getBlockNumberFilterForTag(blockTag, supabase)) : undefined
 
@@ -59,8 +60,14 @@ export const { GET } = defineRoute({
           query.lte('block_number', blockNumberFilter)
       }
 
-     
+      if (owner_address) {
+        query.eq('owner_address', getCaseInsensitiveQuery(owner_address))
+      }
+      if (receiver_address) {
+        query.eq('receiver_address', getCaseInsensitiveQuery(receiver_address))
+      }
 
+  
       const { data, error } = await query
 
       if (error) {

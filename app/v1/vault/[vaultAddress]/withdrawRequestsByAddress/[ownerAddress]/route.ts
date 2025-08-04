@@ -17,8 +17,8 @@ export const { GET } = defineRoute({
   method: "GET",
   operationId: "getWithdrawRequestsByAddress",
   tags: ["/v1/vault"],
-  summary: "Withdraw requests by address",
-  description: "Fetches all withdraw requests for a vault by a specific address.",
+  summary: "[Deprecated] Withdraw requests by address",
+  description: "DEPRECATED. Please use withdrawRequests. Fetches all withdraw requests for a vault by a specific address.",
   pathParams: z.object({
     vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('Ethereum address'),
     ownerAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('Ethereum address'),
