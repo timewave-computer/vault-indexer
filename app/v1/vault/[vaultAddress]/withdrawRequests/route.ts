@@ -6,8 +6,8 @@ import { z } from "zod";
 import {  supabase, paginationSchema, getBlockNumberFilterForTag, getCaseInsensitiveQuery } from "@/app/lib";
 
 const getWithdrawRequestsQuerySchema = paginationSchema.extend({
-  owner_address: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional().describe('Filter by request owner. Ethereum address'),
-  receiver_address: z.string().regex(/^neutron1[0-9a-z]{38,59}$/).optional().describe('Filter by receiver address. Neutron address'),
+  owner_address: z.string().regex(/^0x[a-fA-F0-9]{40}$/,"Invalid Ethereum address").optional().describe('Filter by request owner. Ethereum address'),
+  receiver_address: z.string().regex(/^neutron1[0-9a-z]{38,59}$/,"Invalid Neutron address").optional().describe('Filter by receiver address. Neutron address'),
 })
 
 const getWithdrawRequestsResponseSchema = z.object({
@@ -27,7 +27,7 @@ export const { GET } = defineRoute({
   summary: "Withdraw requests",
   description: "Fetches all withdraw requests for a vault. Withdraw requests are created when a user requests to withdraw their shares from the vault.",
   pathParams: z.object({
-    vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('Ethereum address'),
+    vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/,"Invalid Ethereum address").describe('Ethereum address'),
   }),
   queryParams: getWithdrawRequestsQuerySchema,
   action: async({pathParams, queryParams}) => {
@@ -93,6 +93,11 @@ export const { GET } = defineRoute({
       }),
     },
   },
+  handleErrors: (errorType, issues) => {
+    return Response.json({ reason: errorType,
+      ...(issues && { errors: issues }),
+       }, { status: 400, })
+  }
 
 })
 

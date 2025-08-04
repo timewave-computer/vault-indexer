@@ -4,7 +4,7 @@ import defineRoute from "@omer-x/next-openapi-route-handler";
 import { supabase, paginationSchema, getCaseInsensitiveQuery, getBlockNumberFilterForTag } from "@/app/lib";
 
 const getPositionsQuerySchema = paginationSchema.extend({
-  owner_address: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional().describe('Filter by owner address. Ethereum address'),
+  owner_address: z.string().regex(/^0x[a-fA-F0-9]{40}$/,"Invalid Ethereum address").optional().describe('Filter by owner address. Ethereum address'),
 })
 
  const getPositionsResponseSchema = z.object({
@@ -27,7 +27,7 @@ export const { GET } = defineRoute({
   summary: "Positions",
   description: "Get all positions for a vault. Position amounts and start heights are immutable. When a balance changes, a new position is created at block height B, and the old position is closed at block height B-1. If the balance changes to 0, the position will be marked as terminated.",
   pathParams: z.object({
-    vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('Ethereum address'),
+    vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/,"Invalid Ethereum address").describe('Ethereum address'),
   }),
   queryParams: getPositionsQuerySchema,
   action: async({pathParams, queryParams}) => {
@@ -99,5 +99,10 @@ export const { GET } = defineRoute({
       }),
     },
   },
+  handleErrors: (errorType, issues) => {
+    return Response.json({ reason: errorType,
+      ...(issues && { errors: issues }),
+       }, { status: 400, })
+  }
 })
 
