@@ -4,7 +4,7 @@ import defineRoute from "@omer-x/next-openapi-route-handler";
 import { supabase, paginationSchema, getCaseInsensitiveQuery, getBlockNumberFilterForTag } from "@/app/lib";
 
 const getPositionsQuerySchema = paginationSchema.extend({
-  owner_address: z.string().optional(),
+  owner_address: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional().describe('Filter by owner address. Ethereum address'),
 })
 
  const getPositionsResponseSchema = z.object({
