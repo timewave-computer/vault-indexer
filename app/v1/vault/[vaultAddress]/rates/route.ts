@@ -21,7 +21,7 @@ export const { GET } = defineRoute({
   summary: "Vault rates",
   description: `Fetches rates for a vault. By default, it fetches rates for the last 30 days. You can specify a time range to fetch rates for. Maximum output is ${MAX_TIME_RANGE_RESULTS} results.`,
   pathParams: z.object({
-    vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('Ethereum address'),
+    vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/,"Invalid Ethereum address").describe('Ethereum address'),
   }),
   queryParams: timeRangeSchema,
   action: async({pathParams, queryParams}) => {
@@ -77,6 +77,11 @@ export const { GET } = defineRoute({
       }),
     },
   },
+  handleErrors: (errorType, issues) => {
+    return Response.json({ reason: errorType,
+      ...(issues && { errors: issues }),
+       }, { status: 400, })
+  }
 
 })
 
