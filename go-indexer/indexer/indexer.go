@@ -202,9 +202,6 @@ func (i *Indexer) Start() error {
 		// Wait for any process to stop
 		select {
 		case <-i.eventProcessor.ctx.Done():
-			i.logger.Info("Error in event ingestion, stopping indexer")
-			i.Stop()
-		case <-i.transformer.ctx.Done():
 			i.logger.Info("Event processor stopped, stopping indexer")
 			i.Stop()
 		case <-i.transformer.ctx.Done():
