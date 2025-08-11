@@ -101,6 +101,33 @@ contracts:
         - "Transfer"
         - "WithdrawRequested"
         - "RateUpdated"
+    - name: "Neutron Vault 5"
+      address: "0x092404da30b0a7a5c1159969be639b63c7fb8701"
+      start_block: 23117096
+      abi_path: "vault.abi.json"
+      events:
+        - "Deposit"
+        - "Transfer"
+        - "WithdrawRequested"
+        - "RateUpdated"
+    - name: "Neutron Vault 6"
+      address: "0x57089f120d45e41c258a73543084990fd9555301"
+      start_block: 23117347
+      abi_path: "vault.abi.json"
+      events:
+        - "Deposit"
+        - "Transfer"
+        - "WithdrawRequested"
+        - "RateUpdated"
+    - name: "Neutron Vault 7"
+      address: "0x00fd480ce9c08c08208350cb91b7a43538eace27"
+      start_block: 23117581
+      abi_path: "vault.abi.json"
+      events:
+        - "Deposit"
+        - "Transfer"
+        - "WithdrawRequested"
+        - "RateUpdated"
     
     
     
