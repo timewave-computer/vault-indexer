@@ -121,7 +121,7 @@ contracts:
         - "RateUpdated"
     - name: "Neutron Vault 7"
       address: "0x00fd480ce9c08c08208350cb91b7a43538eace27"
-      start_block: 32105736
+      start_block: 23117581
       abi_path: "vault.abi.json"
       events:
         - "Deposit"
