@@ -77,6 +77,8 @@
                 ExecStart = "${lib.getExe package} prod";
                 Restart = "on-failure";
                 RestartSec = "1s";
+                RestartSteps = 40;
+                RestartMaxDelaySec = "20min";
                 StateDirectory = "vault-indexer";
                 WorkingDirectory = "/var/lib/vault-indexer";
               };
