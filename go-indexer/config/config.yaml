@@ -120,7 +120,7 @@ contracts:
         - "WithdrawRequested"
         - "RateUpdated"
     - name: "Neutron Vault 7"
-      address: "0x00fd480ce9c08c08208350cb91b7a43538eace27"
+      address: "0x028c998126fdb787dd9ee3ce9bd00cc2701136bb"
       start_block: 23117581
       abi_path: "vault.abi.json"
       events:
