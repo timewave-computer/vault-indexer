@@ -146,6 +146,15 @@ contracts:
         - "Transfer"
         - "WithdrawRequested"
         - "RateUpdated"
+    - name: "Neutron Vault 10"
+      address: "0x8e78915edc31b994b73ab388509901b2aad90744"
+      start_block: 23175022
+      abi_path: "vault.abi.json"
+      events:
+        - "Deposit"
+        - "Transfer"
+        - "WithdrawRequested"
+        - "RateUpdated"
     
     
     
