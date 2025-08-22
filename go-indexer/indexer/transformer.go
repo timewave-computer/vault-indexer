@@ -143,9 +143,8 @@ func (t *Transformer) Start() error {
 				rows.Close()
 
 				if len(events) == 0 {
-					t.logger.Info("No events to transform, waiting 15 seconds")
 					select {
-					case <-time.After(15 * time.Second):
+					case <-time.After(3 * time.Millisecond):
 					case <-t.ctx.Done():
 						return
 					}

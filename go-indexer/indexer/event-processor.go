@@ -83,9 +83,8 @@ func (ep *EventProcessor) Start() error {
 			event := ep.eventQueue.Next()
 
 			if event == nil {
-				ep.logger.Info("No events in ingestion queue, waiting 15 seconds")
 				select {
-				case <-time.After(15 * time.Second):
+				case <-time.After(30 * time.Millisecond):
 				case <-ep.ctx.Done():
 					return
 
@@ -112,7 +111,7 @@ func (ep *EventProcessor) Start() error {
 					event.Event.Name, event.BlockNumber, currentBlock, event.BlockNumber+ep.requiredConfirmations)
 				ep.eventQueue.Insert(*event)
 				select {
-				case <-time.After(15 * time.Second):
+				case <-time.After(1 * time.Millisecond):
 				case <-ep.ctx.Done():
 					return
 				}
