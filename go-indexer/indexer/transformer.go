@@ -18,6 +18,8 @@ import (
 	transformers "github.com/timewave/vault-indexer/go-indexer/transformers"
 )
 
+var TRANSFORMER_POLL_INTERVAL = 50 * time.Millisecond
+
 // Transformer handles processing of raw events into derived data
 type Transformer struct {
 	db                         *supa.Client
@@ -144,7 +146,7 @@ func (t *Transformer) Start() error {
 
 				if len(events) == 0 {
 					select {
-					case <-time.After(3 * time.Millisecond):
+					case <-time.After(TRANSFORMER_POLL_INTERVAL):
 					case <-t.ctx.Done():
 						return
 					}
