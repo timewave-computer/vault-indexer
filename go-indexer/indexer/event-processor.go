@@ -11,7 +11,7 @@ import (
 	"github.com/timewave/vault-indexer/go-indexer/logger"
 )
 
-var EVENT_PROCESSOR_POLL_INTERVAL = 500 * time.Millisecond
+const EVENT_PROCESSOR_POLL_INTERVAL = 500 * time.Millisecond
 
 // EventProcessor handles processing of events from the event queue
 type EventProcessor struct {

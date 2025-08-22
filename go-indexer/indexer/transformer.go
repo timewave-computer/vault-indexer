@@ -18,7 +18,7 @@ import (
 	transformers "github.com/timewave/vault-indexer/go-indexer/transformers"
 )
 
-var TRANSFORMER_POLL_INTERVAL = 500 * time.Millisecond
+const TRANSFORMER_POLL_INTERVAL = 500 * time.Millisecond
 
 // Transformer handles processing of raw events into derived data
 type Transformer struct {
