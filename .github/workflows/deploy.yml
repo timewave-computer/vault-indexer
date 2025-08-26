@@ -1,0 +1,17 @@
+name: Deploy
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: convictional/trigger-workflow-and-wait@v1.6.1
+        with:
+          owner: timewave-computer
+          repo: infra
+          workflow_file_name: update-input.yml
+          client_payload: '{"input":"vault-indexer"}'
+          github_token: ${{ secrets.PAT }}
