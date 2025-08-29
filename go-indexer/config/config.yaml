@@ -182,5 +182,23 @@ contracts:
         - "Transfer"
         - "WithdrawRequested"
         - "RateUpdated"
+    - name: "Neutron Vault 14"
+      address: "0x660203380947d5f1B4A084c4062d2fd32c15B253"
+      start_block: 23239265
+      abi_path: "vault.abi.json"
+      events:
+        - "Deposit"
+        - "Transfer"
+        - "WithdrawRequested"
+        - "RateUpdated"
+    - name: "Neutron Vault 15"
+      address: "0x8a1316311bca266116fb0858e61de3a9efff9f33"
+      start_block: 23239886
+      abi_path: "kyc_vault.abi.json"
+      events:
+        - "Deposit"
+        - "Transfer"
+        - "WithdrawRequested"
+        - "RateUpdated"
     
     
