@@ -236,7 +236,7 @@ contracts:
         - "Transfer"
         - "WithdrawRequested"
         - "RateUpdated"
-    - name: "wbtc-mars-lend-only"
+    - name: "wbtc-amber-lend-only"
       address: "0x9eeb468751a293d584d93bfaffa9e853c540cfff"
       start_block: 23274628
       abi_path: "kyc_vault.abi.json"
