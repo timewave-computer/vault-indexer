@@ -193,7 +193,7 @@ contracts:
         - "RateUpdated"
     - name: "Neutron Vault 16"
       address: "0x359a4bc6d7f791971819f6dbdc1ed762956ea0d0"
-      start_block: 23288163
+      start_block: 23288162
       abi_path: "kyc_vault.abi.json"
       events:
         - "Deposit"
