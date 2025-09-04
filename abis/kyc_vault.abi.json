@@ -179,11 +179,6 @@
         "internalType": "address"
       },
       {
-        "name": "wrapper",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
         "name": "depositFeeBps",
         "type": "uint32",
         "internalType": "uint32"
@@ -377,6 +372,11 @@
         "name": "startingRate",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "wrapper",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [],
@@ -829,6 +829,19 @@
   },
   {
     "type": "function",
+    "name": "updateWrapper",
+    "inputs": [
+      {
+        "name": "_newWrapper",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "upgradeToAndCall",
     "inputs": [
       {
@@ -1007,11 +1020,6 @@
           },
           {
             "name": "strategist",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
-            "name": "wrapper",
             "type": "address",
             "internalType": "address"
           },
