@@ -281,4 +281,13 @@ contracts:
         - "Transfer"
         - "WithdrawRequested"
         - "RateUpdated"
+    - name: "wbtc-maxbtc-mint-only"
+      address: "0x119e4c0e9ccec2684233e139e3260057f57547f3"
+      start_block: 23339259
+      abi_path: "kyc_vault.abi.json"
+      events:
+        - "Deposit"
+        - "Transfer"
+        - "WithdrawRequested"
+        - "RateUpdated"
     
