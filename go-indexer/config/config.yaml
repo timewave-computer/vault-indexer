@@ -284,7 +284,7 @@ contracts:
     - name: "wbtc-maxbtc-mint-only"
       address: "0x119e4c0e9ccec2684233e139e3260057f57547f3"
       start_block: 23339259
-      abi_path: "kyc_vault.abi.json"
+      abi_path: "kyc_vault_v2.abi.json"
       events:
         - "Deposit"
         - "Transfer"
@@ -293,7 +293,7 @@ contracts:
     - name: "wbtc-maxbtc-mint-and-supervault"
       address: "0xA1E5a311d2DC7bfE4AE770e23225839b688a2456"
       start_block: 23377567
-      abi_path: "kyc_vault.abi.json"
+      abi_path: "kyc_vault_v2.abi.json"
       events:
         - "Deposit"
         - "Transfer"
