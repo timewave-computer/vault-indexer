@@ -290,4 +290,12 @@ contracts:
         - "Transfer"
         - "WithdrawRequested"
         - "RateUpdated"
-    
+    - name: "wbtc-maxbtc-mint-and-supervault"
+      address: "0xA1E5a311d2DC7bfE4AE770e23225839b688a2456"
+      start_block: 23377567
+      abi_path: "kyc_vault.abi.json"
+      events:
+        - "Deposit"
+        - "Transfer"
+        - "WithdrawRequested"
+        - "RateUpdated"
