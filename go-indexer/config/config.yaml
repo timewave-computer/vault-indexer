@@ -203,7 +203,7 @@ contracts:
     - name: "wbtc-unibtc"
       address: "0x1d2042c6770d01f4c91cfe128cfc3aff1ec1561c"
       start_block: 23268406
-      abi_path: "kyc_vault.abi.json"
+      abi_path: "vault.abi.json"
       events:
         - "Deposit"
         - "Transfer"
@@ -212,7 +212,7 @@ contracts:
     - name: "wbtc-solvbtc"
       address: "0x4dc0058ad13293a468a724660f4be0bbc46c9383"
       start_block: 23268653
-      abi_path: "kyc_vault.abi.json"
+      abi_path: "vault.abi.json"
       events:
         - "Deposit"
         - "Transfer"
@@ -221,7 +221,7 @@ contracts:
     - name: "wbtc-ebtc"
       address: "0xbee15e5a0c3f2fbd8f4d39c3563eedd5564e9fe7"
       start_block: 23268921
-      abi_path: "kyc_vault.abi.json"
+      abi_path: "vault.abi.json"
       events:
         - "Deposit"
         - "Transfer"
@@ -230,7 +230,7 @@ contracts:
     - name: "wbtc-mars-lend-only"
       address: "0x63544ac5d49956db530baf37f7f7df9a7dce6cd1"
       start_block: 23275164
-      abi_path: "kyc_vault.abi.json"
+      abi_path: "vault.abi.json"
       events:
         - "Deposit"
         - "Transfer"
@@ -239,7 +239,7 @@ contracts:
     - name: "wbtc-amber-lend-only"
       address: "0x9eeb468751a293d584d93bfaffa9e853c540cfff"
       start_block: 23274628
-      abi_path: "kyc_vault.abi.json"
+      abi_path: "vault.abi.json"
       events:
         - "Deposit"
         - "Transfer"
@@ -248,7 +248,7 @@ contracts:
     - name: "usdc-maxbtc"
       address: "0xac2f425e902cd25ba286b14ce4a7f9162a859294"
       start_block: 23275589
-      abi_path: "kyc_vault.abi.json"
+      abi_path: "vault.abi.json"
       events:
         - "Deposit"
         - "Transfer"
@@ -257,7 +257,7 @@ contracts:
     - name: "unibtc-maxbtc"
       address: "0x9d6900be765ef542d984eabda75f65a7609713d7"
       start_block: 23275920
-      abi_path: "kyc_vault.abi.json"
+      abi_path: "vault.abi.json"
       events:
         - "Deposit"
         - "Transfer"
@@ -266,7 +266,7 @@ contracts:
     - name: "solvbtc-maxbtc"
       address: "0x03397fec419ea8461aa63b6f293c4ea1e6ea5c86"
       start_block: 23276238
-      abi_path: "kyc_vault.abi.json"
+      abi_path: "vault.abi.json"
       events:
         - "Deposit"
         - "Transfer"
@@ -275,7 +275,7 @@ contracts:
     - name: "ebtc-maxbtc"
       address: "0x821b6a88eb6c2ccde24104760e8167afdc81ad50"
       start_block: 23277153
-      abi_path: "kyc_vault.abi.json"
+      abi_path: "vault.abi.json"
       events:
         - "Deposit"
         - "Transfer"
@@ -284,10 +284,18 @@ contracts:
     - name: "wbtc-maxbtc-mint-only"
       address: "0x119e4c0e9ccec2684233e139e3260057f57547f3"
       start_block: 23339259
-      abi_path: "kyc_vault.abi.json"
+      abi_path: "kyc_vault_v2.abi.json"
       events:
         - "Deposit"
         - "Transfer"
         - "WithdrawRequested"
         - "RateUpdated"
-    
+    - name: "wbtc-maxbtc-mint-and-supervault"
+      address: "0xA1E5a311d2DC7bfE4AE770e23225839b688a2456"
+      start_block: 23377567
+      abi_path: "kyc_vault_v2.abi.json"
+      events:
+        - "Deposit"
+        - "Transfer"
+        - "WithdrawRequested"
+        - "RateUpdated"
