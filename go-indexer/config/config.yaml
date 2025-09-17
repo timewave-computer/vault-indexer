@@ -291,8 +291,8 @@ contracts:
         - "WithdrawRequested"
         - "RateUpdated"
     - name: "wbtc-maxbtc-mint-and-supervault"
-      address: "0xA1E5a311d2DC7bfE4AE770e23225839b688a2456"
-      start_block: 23377567
+      address: "0x65bce996fee6b43c899fb6a0a621bdc4bd49fde4"
+      start_block: 23384484
       abi_path: "kyc_vault_v2.abi.json"
       events:
         - "Deposit"
