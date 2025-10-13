@@ -11,8 +11,6 @@ import (
 	"github.com/timewave/vault-indexer/go-indexer/logger"
 )
 
-const EVENT_PROCESSOR_POLL_INTERVAL = 500 * time.Millisecond
-
 // EventProcessor handles processing of events from the event queue
 type EventProcessor struct {
 	eventQueue            *event_queue.EventQueue
@@ -85,8 +83,9 @@ func (ep *EventProcessor) Start() error {
 			event := ep.eventQueue.Next()
 
 			if event == nil {
+				ep.logger.Info("No events in ingestion queue, waiting 15 seconds")
 				select {
-				case <-time.After(EVENT_PROCESSOR_POLL_INTERVAL):
+				case <-time.After(15 * time.Second):
 				case <-ep.ctx.Done():
 					return
 
@@ -109,12 +108,11 @@ func (ep *EventProcessor) Start() error {
 
 			if (event.BlockNumber + ep.requiredConfirmations) > currentBlock {
 				// not enough confirmations, put back in queue
-				ep.logger.Info("Not enough confirmations, putting back in queue and waiting %v. Event name: %s, block %d, current block %d, required height for ingestion: %d",
-					EVENT_PROCESSOR_POLL_INTERVAL,
+				ep.logger.Info("Not enough confirmations, putting back in queue and waiting 15 seconds. Event name: %s, block %d, current block %d, required height for ingestion: %d",
 					event.Event.Name, event.BlockNumber, currentBlock, event.BlockNumber+ep.requiredConfirmations)
 				ep.eventQueue.Insert(*event)
 				select {
-				case <-time.After(EVENT_PROCESSOR_POLL_INTERVAL):
+				case <-time.After(15 * time.Second):
 				case <-ep.ctx.Done():
 					return
 				}
